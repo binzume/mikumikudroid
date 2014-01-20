@@ -218,11 +218,13 @@ public class Miku {
 		if(ja != null) {
 			for(int i = 0; i < ja.size(); i++) {
 				Joint j = ja.get(i);
-				int rb1 = rba.get(j.rigidbody_a).btrb;
-				int rb2 = rba.get(j.rigidbody_b).btrb;
+				RigidBody rb1 = rba.get(j.rigidbody_a);
+				RigidBody rb2 = rba.get(j.rigidbody_b);
 				
-				j.btcst = btAddJoint(rb1, rb2, j.position, j.rotation, j.const_position_1, j.const_position_2,
-						j.const_rotation_1, j.const_rotation_2, j.spring_position, j.spring_rotation);
+				if (rb1.type != 0 || rb2.type != 0) {
+					j.btcst = btAddJoint(rb1.btrb, rb2.btrb, j.position, j.rotation, j.const_position_1, j.const_position_2,
+							j.const_rotation_1, j.const_rotation_2, j.spring_position, j.spring_rotation);
+				}
 			}
 		}
 	}
@@ -460,9 +462,14 @@ public class Miku {
 				Vector.normalize(effecterInvs);
 				Vector.normalize(targetInvs);
 				double angle = Math.acos(Vector.dot(effecterInvs, targetInvs));
-				angle *= ik.control_weight;
+				// angle *= ik.control_weight; // avoid divergence...
 
 				if (!Double.isNaN(angle)) {
+					if (angle > ik.control_weight * 4) {
+						angle = ik.control_weight;
+					} else if (angle < -ik.control_weight * 4) {
+						angle = -ik.control_weight;
+					}
 					Vector.cross(axis, targetInvs, effecterInvs);
 					Vector.normalize(axis);
 
