@@ -384,7 +384,7 @@ public class PMDParser extends ParserBase implements ModelFile {
 				bone.matrix = new float[16]; // for skin-mesh animation
 				bone.matrix_current = new float[16]; // for temporary (current bone matrix that is not include parent rotation
 				bone.updated = false; // whether matrix is updated by VMD or not
-				bone.is_leg = bone.name.contains("�Ђ�");
+				bone.is_leg = bone.name.contains("\u3072\u3056"); // HI,ZA in HIRAGANA.  ("ひざ"　文字化け回避用にエスケープ)
 				
 				if (bone.tail != -1) {
 					mBone.add(i, bone);
