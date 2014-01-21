@@ -6,6 +6,7 @@ import android.app.ActivityManager;
 import android.content.Context;
 import android.content.pm.ConfigurationInfo;
 import android.opengl.GLSurfaceView;
+import android.view.SurfaceHolder;
 
 public class MMGLSurfaceView extends GLSurfaceView {
 
@@ -32,6 +33,13 @@ public class MMGLSurfaceView extends GLSurfaceView {
 		ActivityManager am = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
 		ConfigurationInfo info = am.getDeviceConfigurationInfo();
 		return (info.reqGlEsVersion >= 0x20000);
+	}
+
+
+	@Override
+	public void surfaceDestroyed(SurfaceHolder holder) {
+		mMikuRendarer.destroy();
+		super.surfaceDestroyed(holder);
 	}
 
 	public void deleteTextures(final ArrayList<MikuModel> mm) {

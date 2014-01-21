@@ -44,7 +44,7 @@ public abstract class AsyncExec<T> extends AsyncTask <T, Integer, Void> {
 	
 	@Override
 	protected void onPreExecute() {
-		mProg.show();
+		//mProg.show();
 	}
 	
 	@Override

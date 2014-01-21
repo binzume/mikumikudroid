@@ -10,7 +10,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.StringWriter;
 import java.util.ArrayList;
-
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
@@ -21,39 +21,59 @@ import android.os.Build;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.util.Log;
+import android.view.KeyEvent;
+import android.view.View;
 
 public class CoreLogic {
 	// model / music data
-	private ArrayList<Miku>		mMiku;
-	private String				mBG;
-	private MikuMotion			mCamera;
-	private MediaPlayer			mMedia;
-	private FakeMedia			mFakeMedia;
-	private String				mMediaName;
-	private long				mCurTime;
-	private long				mPrevTime;
-	private long				mStartTime;
-	private double				mFPS;
-	
-	private float[]				mPMatrix = new float[16];
-	private float[]				mMVMatrix = new float[16];
-	private float[]				mRMatrix = new float[16];
-	
+	private ArrayList<Miku> mMiku;
+	private String mBG;
+	private MikuMotion mCamera;
+	private MediaPlayer mMedia;
+	private FakeMedia mFakeMedia;
+	private String mMediaName;
+	private long mCurTime;
+	private long mPrevTime;
+	private long mStartTime;
+	private double mFPS;
+
+	private float[] mPMatrix = new float[16];
+	private float[] mMVMatrix = new float[16];
+	private float[] mRMatrix = new float[16];
+	volatile private float[] mCameraOrientation = new float[3];
+	volatile private float[] cameraPosition = new float[3];
+	private float cameraDistance = 13f;
+	private long jumpStartTime = 0;
+	private float jumpVelocity = 0;
+
 	// configurations
-	private String				mBase;
-	private int					mMaxBone = 0;
-	private Context				mCtx;
-	private int					mWidth;
-	private int					mHeight;
-	private int					mAngle;
-	private boolean				mPhysics = false;
-	private boolean				mPrevPhysics = false;
+	private String mBase;
+	private int mMaxBone = 0;
+	private Context mCtx;
+	private int mScreenWidth;
+	private int mScreenHeight;
+	private int mRenderWidth;
+	private int mRenderHeight;
+	private int mAngle;
+	private boolean mPhysics = true;
+	private boolean mPrevPhysics = false;
+	
+	public boolean cameraVisible = false;
+	
+	public static final int CAMERA_MODE_FIXED = 0;
+	public static final int CAMERA_MODE_MOTION = 1;
+	public static final int CAMERA_MODE_SENSOR = 2;
+	public static final int CAMERA_MODE_SENSOR2 = 3;
+	public static final int CAMERA_MODE_MAX = 4;
+	private int cameraMode = CAMERA_MODE_FIXED;
+
+	public boolean keyState[] = new boolean[256];
+	public float analogInput[] = new float[16];
+
 	
 	// temporary data
-	private CameraIndex			mCameraIndex = new CameraIndex();
-	private CameraPair			mCameraPair  = new CameraPair();
-	
-	
+	private CameraIndex mCameraIndex = new CameraIndex();
+	private CameraPair mCameraPair = new CameraPair();
 
 	private class FakeMedia {
 		private WakeLock mWakeLock;
@@ -63,7 +83,6 @@ public class CoreLogic {
 		private boolean mIsFinished;
 		private int mMax;
 
-
 		public FakeMedia(Context ctx) {
 			PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
 			mWakeLock = pm.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, "MikuMikuDroid");
@@ -72,59 +91,59 @@ public class CoreLogic {
 			mPos = 0;
 			mMax = 0;
 		}
-		
+
 		public boolean toggleStartStop() {
 			updatePos();
-			if(mIsPlaying) {	// during play
+			if (mIsPlaying) { // during play
 				stop();
 			} else {
 				start();
 			}
 			return mIsPlaying;
 		}
-		
+
 		public int getCurrentPosition() {
 			updatePos();
-			
+
 			return mPos;
 		}
-		
+
 		public void relaseLock() {
-			if(mIsPlaying) {
+			if (mIsPlaying) {
 				stop();
 			}
 			mIsFinished = false;
 			mPos = 0;
 			mMax = 0;
 		}
-		
+
 		private void updatePos() {
-			if(mIsPlaying) {
+			if (mIsPlaying) {
 				long cur = System.currentTimeMillis();
 				mPos += (cur - mCallTime);
 				mCallTime = cur;
 
-				if(mPos > mMax) {
+				if (mPos > mMax) {
 					mPos = mMax;
 					mIsFinished = true;
 					stop();
 				}
 			}
 		}
-		
+
 		private void start() {
 			mWakeLock.acquire();
 			mIsPlaying = true;
-			mCallTime  = System.currentTimeMillis();
-			if(mIsFinished) {
+			mCallTime = System.currentTimeMillis();
+			if (mIsFinished) {
 				mIsFinished = false;
 				mPos = 0;
 			}
 		}
-		
+
 		private void stop() {
 			mWakeLock.release();
-			mIsPlaying = false;			
+			mIsPlaying = false;
 		}
 
 		public void seekTo(int i) {
@@ -132,8 +151,8 @@ public class CoreLogic {
 		}
 
 		public void pause() {
-			if(mIsPlaying) {
-				stop();				
+			if (mIsPlaying) {
+				stop();
 			}
 		}
 
@@ -148,45 +167,45 @@ public class CoreLogic {
 		public boolean isPlaying() {
 			return mIsPlaying;
 		}
-		
+
 	}
-	
+
 	native private void btMakeWorld();
-	
+
 	native private void btDumpAll();
 
+	static {
+		if (isArm()) {
+			System.loadLibrary("bullet-jni");
+			Log.d("Miku", "Use ARM native codes.");
+		}
+	}
 
-    static {
-    	if(isArm()) {
-            System.loadLibrary("bullet-jni");
-            Log.d("Miku", "Use ARM native codes.");
-    	}
-    }
-  
 	public CoreLogic(Context ctx) {
 		mCtx = ctx;
 		mFakeMedia = new FakeMedia(ctx);
 
 		clearMember();
-		if(isArm()) {
+		if (isArm()) {
 			btMakeWorld();
 		}
-		
-		if(new File("/sdcard/.MikuMikuDroid").exists()) {
+
+		if (new File("/sdcard/.MikuMikuDroid").exists()) {
 			mBase = "/sdcard/.MikuMikuDroid/";
 		} else {
-			mBase = "/sdcard/MikuMikuDroid/";			
+			mBase = "/sdcard/MikuMikuDroid/";
 		}
 	}
-	
+
 	public void setGLConfig(int max_bone) {
-		if(mMaxBone == 0) {
+		if (mMaxBone == 0) {
 			mMaxBone = max_bone;
 			onInitialize();
 		}
 	}
-	
-	public void onInitialize() {}
+
+	public void onInitialize() {
+	}
 
 	// ///////////////////////////////////////////////////////////
 	// Model configurations
@@ -194,14 +213,14 @@ public class CoreLogic {
 		// model
 		PMDParser pmd = new PMDParser(mBase, modelf);
 		MikuModel model = new MikuModel(mBase, pmd, mMaxBone, false);
-		
+
 		// Create Miku
 		Miku miku = new Miku(model);
-				
+
 		// add Miku
 		mMiku.add(miku);
 	}
-	
+
 	public void loadMotion(String motionf) throws IOException {
 		// motion
 		VMDParser vmd = new VMDParser(motionf);
@@ -211,62 +230,67 @@ public class CoreLogic {
 		String vmc = motionf.replaceFirst(".vmd", "_mmcache.vmc");
 		try {
 			ObjectInputStream oi = new ObjectInputStream(new FileInputStream(vmc));
-			motion = (MikuMotion)oi.readObject();
+			motion = (MikuMotion) oi.readObject();
 			motion.attachVMD(vmd);
 		} catch (Exception e) {
 			motion = new MikuMotion(vmd);
 		}
 
 		// Create Miku
-		if(mMiku != null) {
+		if (mMiku != null) {
 			Miku miku = mMiku.get(mMiku.size() - 1);
 			miku.attachMotion(motion);
 			miku.setBonePosByVMDFramePre(0, 0, true);
 			miku.setBonePosByVMDFramePost(mPhysics);
 			miku.setFaceByVMDFrame(0);
-			
+
 			// store IK chache
 			File f = new File(vmc);
-			if(!f.exists()) {
+			if (!f.exists()) {
 				ObjectOutputStream oi = new ObjectOutputStream(new FileOutputStream(vmc));
 				oi.writeObject(motion);
 			}
 		}
 	}
-	
+
 	public synchronized boolean loadModelMotion(String modelf, String motionf) throws IOException, OutOfMemoryError {
 		// read model/motion files
 		PMDParser pmd = new PMDParser(mBase, modelf);
-		
-		if(pmd.isPmd()) {
+
+		Log.d("loadModelMotion","isPmd");
+		if (pmd.isPmd()) {
 			// create texture cache
+			Log.d("loadModelMotion","pmd");
 			createTextureCache(pmd);
-			
+
 			// construct model/motion data structure
 			MikuModel model = new MikuModel(mBase, pmd, mMaxBone, true);
 			MikuMotion motion = null;
 			pmd = null;
-			
+
 			// delete previous cache
 			String vmc = motionf.replaceFirst(".vmd", "_mmcache.vmc");
 			File vmcf = new File(vmc);
-			if(vmcf.exists()) {
+			if (vmcf.exists()) {
 				vmcf.delete();
 			}
 
 			VMDParser vmd = new VMDParser(motionf);
-			if(vmd.isVmd()) {
+			if (vmd.isVmd()) {
+				Log.d("loadModelMotion","vmd");
 				// check IK cache
 				CacheFile c = new CacheFile(mBase, "vmc");
 				c.addFile(modelf);
 				c.addFile(motionf);
 				vmc = c.getCacheFileName();
 				boolean vmc_success = true;
+				Log.d("loadModelMotion","try");
 				try {
 					ObjectInputStream oi = new ObjectInputStream(new FileInputStream(vmc));
-					motion = (MikuMotion)oi.readObject();
+					motion = (MikuMotion) oi.readObject();
 					motion.attachVMD(vmd);
 				} catch (Exception e) {
+					Log.d("loadModelMotion","fail");
 					motion = new MikuMotion(vmd);
 					vmc_success = false;
 				}
@@ -280,23 +304,23 @@ public class CoreLogic {
 				miku.setFaceByVMDFrame(0);
 				miku.addRenderSenario("builtin:default", "screen");
 				miku.addRenderSenario("builtin:default_alpha", "screen");
-				
+
 				// store IK chache
-				if(!vmc_success) {
+				if (!vmc_success) {
 					File f = new File(vmc);
-					if(!f.exists()) {
+					if (!f.exists()) {
 						f.delete();
 					}
 					ObjectOutputStream oi = new ObjectOutputStream(new FileOutputStream(vmc));
-					oi.writeObject(motion);					
+					oi.writeObject(motion);
 				}
-				
+
 				// add Miku
 				mMiku.add(miku);
-				
+
 				// set max dulation
 				mFakeMedia.setMax(motion.maxFrame());
-				
+
 				return true;
 			} else {
 				return false;
@@ -305,27 +329,27 @@ public class CoreLogic {
 			return false;
 		}
 	}
-	
+
 	public synchronized boolean loadAccessory(String modelf) throws IOException, OutOfMemoryError {
 		// create cache
 		CacheFile c = new CacheFile(mBase, "xc");
 		c.addFile(modelf);
 		String xc = c.getCacheFileName();
 		ModelBuilder mb = new ModelBuilder(modelf);
-		
-		if(!c.hasCache() || !mb.readFromFile(xc)) {
-			XParser x = new XParser(mBase, modelf, 10.0f);			
-			if(x.isX()) {
+
+		if (!c.hasCache() || !mb.readFromFile(xc)) {
+			XParser x = new XParser(mBase, modelf, 10.0f);
+			if (x.isX()) {
 				x.getModelBuilder().writeToFile(xc);
 			}
-			if(!mb.readFromFile(xc)) {
+			if (!mb.readFromFile(xc)) {
 				return false;
 			}
 		}
-		
+
 		createTextureCache(mb);
 		MikuModel model = new MikuModel(mBase, mb, mMaxBone, false);
-		Miku miku = new Miku(model);			
+		Miku miku = new Miku(model);
 		miku.addRenderSenario("builtin:nomotion", "screen");
 		miku.addRenderSenario("builtin:nomotion_alpha", "screen");
 		mMiku.add(miku);
@@ -334,17 +358,17 @@ public class CoreLogic {
 
 	public synchronized MikuModel loadStage(String file) throws IOException, OutOfMemoryError {
 		PMDParser pmd = new PMDParser(mBase, file);
-		if(pmd.isPmd()) {
+		if (pmd.isPmd()) {
 			createTextureCache(pmd);
 			MikuModel model = new MikuModel(mBase, pmd, mMaxBone, false);
-			Miku miku = new Miku(model);			
+			Miku miku = new Miku(model);
 			miku.addRenderSenario("builtin:nomotion", "screen");
 			miku.addRenderSenario("builtin:nomotion_alpha", "screen");
 			mMiku.add(miku);
 		}
 		return null;
 	}
-	
+
 	public synchronized String loadBG(String file) {
 		String tmp = mBG;
 		mBG = file;
@@ -356,17 +380,17 @@ public class CoreLogic {
 	}
 
 	public synchronized void loadMedia(String media) {
-		if(mMedia != null) {
+		if (mMedia != null) {
 			mMedia.stop();
 			mMedia.release();
 		} else {
 			mFakeMedia.relaseLock();
 		}
-		
+
 		mMediaName = media;
 		Uri uri = Uri.parse(media);
 		mMedia = MediaPlayer.create(mCtx, uri);
-		if(mMedia != null) {
+		if (mMedia != null) {
 			mMedia.setWakeMode(mCtx, PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE);
 			mMedia.setLooping(true);
 		}
@@ -374,11 +398,12 @@ public class CoreLogic {
 
 	public synchronized void loadCamera(String camera) throws IOException {
 		mCamera = new MikuMotion(new VMDParser(camera));
+		cameraMode = CAMERA_MODE_MOTION;
 	}
-	
+
 	public synchronized void togglePhysics() {
 		mPhysics = !mPhysics;
-		if(!mPhysics) {	// Dump Physics profile
+		if (!mPhysics) { // Dump Physics profile
 			btDumpAll();
 		}
 	}
@@ -388,31 +413,31 @@ public class CoreLogic {
 	public synchronized ArrayList<MikuModel> clear() {
 		// get members for deleting textures
 		ArrayList<MikuModel> models = new ArrayList<MikuModel>();
-		for(Miku m: mMiku) {
+		for (Miku m : mMiku) {
 			models.add(m.mModel);
 		}
-		
+
 		clearMember();
-		
+
 		// clear physics world
 		btClearAllData();
-		
+
 		SharedPreferences sp = mCtx.getSharedPreferences("default", 0);
 		SharedPreferences.Editor ed = sp.edit();
 		ed.clear();
 		ed.commit();
-		
+
 		return models;
 	}
-	
+
 	private void clearMember() {
 		mMiku = new ArrayList<Miku>();
 		mPrevTime = 0;
 		mStartTime = 0;
 		mCamera = null;
-		if(mMedia != null) {
+		if (mMedia != null) {
 			mMedia.stop();
-			mMedia.release();			
+			mMedia.release();
 		} else {
 			mFakeMedia.relaseLock();
 		}
@@ -429,48 +454,55 @@ public class CoreLogic {
 			setDefaultCamera();
 		}
 	}
-	
+
 	native private void btStepSimulation(float step, int max);
-	
+
 	public synchronized int applyCurrentMotion() {
 		boolean initializePhysics = !mPrevPhysics && mPhysics;
 		mPrevPhysics = mPhysics;
 
+		checkKeyState();
+		
 		calcCurrentTime();
 		double frame = getCurrentFrames(32767);
-		float step = (float) (getDeltaTimeMills() / 1000.0);
-		if(step >= 1 || step < 0) {
+		float step;
+		if (isPlaying()) {
+			step = (float) (getDeltaTimeMills() / 1000.0);
+		} else {
+			step = 10 / 1000.0f;
+		}
+		if (step >= 1 || step < 0) {
 			step = 0;
 			initializePhysics = true;
 		}
-		
-		if(initializePhysics) {
-			btClearAllData();			
+
+		if (initializePhysics) {
+			btClearAllData();
 		}
-		
+
 		double prev_frame = calcPrevFrame(frame, step);
-		
+
 		int max_step = 4;
 		float fixed_delta = (float) (1.0 / 60.0);
 		float delta = Math.max(fixed_delta, step / max_step);
 
 		// exec physics simulation: 60Hz
-		if(isArm() && mPhysics && mMiku != null && (step != 0 || !initializePhysics)) {
-			for(; step > 0.00001; step -= delta) {
+		if (isArm() && mPhysics && mMiku != null && (step != 0 || !initializePhysics)) {
+			for (; step > 0.00001; step -= delta) {
 				prev_frame += step > delta ? delta * 30 : step * 30;
 				for (Miku miku : mMiku) {
-					if(miku.hasMotion()) {
+					if (miku.hasMotion()) {
 						miku.setBonePosByVMDFramePre((float) prev_frame, delta, false);
 					}
 				}
-				if(delta == fixed_delta) {
-					btStepSimulation(delta, 1);					
+				if (delta == fixed_delta) {
+					btStepSimulation(delta, 1);
 				} else {
 					btStepSimulation(delta, 0);
 				}
 				for (Miku miku : mMiku) {
-					if(miku.hasMotion()) {
-						for(Bone b: miku.mModel.mBone) {
+					if (miku.hasMotion()) {
+						for (Bone b : miku.mModel.mBone) {
 							b.updated = false;
 						}
 					}
@@ -480,19 +512,61 @@ public class CoreLogic {
 
 		if (mMiku != null) {
 			for (Miku miku : mMiku) {
-				if(miku.hasMotion()) {
+				if (miku.hasMotion()) {
 					miku.setBonePosByVMDFramePre((float) frame, 0, initializePhysics);
 					miku.setBonePosByVMDFramePost(mPhysics);
-					miku.setFaceByVMDFrame((float) frame);					
+					miku.setFaceByVMDFrame((float) frame);
 				}
 			}
 		}
-		
-		setCameraByVMDFrame(frame);
+
+		setCameraByVMDFrame(frame, 0);
 
 		return (int) (frame * 1000 / 30);
 	}
-	
+
+	public void moveCameraX(float x) {
+		double frame = getCurrentFrames(32767);
+		setCameraByVMDFrame(frame, x);
+	}
+
+	public void setCameraOrientation(float[] orientation) {
+		mCameraOrientation[0] = orientation[0];
+		mCameraOrientation[1] = orientation[1];
+		mCameraOrientation[2] = orientation[2];
+	}
+
+	public void setCameraPosition(float[] position) {
+		cameraPosition[0] = position[0]; // X
+		cameraPosition[1] = position[1]; // Y
+		cameraPosition[2] = position[2]; // Z
+	}
+
+	public void toggleViewMode() {
+		cameraMode = (cameraMode + 1) % CAMERA_MODE_MAX;
+		if (cameraMode == CAMERA_MODE_SENSOR2) {
+			cameraPosition[0] = 0;
+			cameraPosition[1] = 18;
+			cameraPosition[2] = 0;
+		} else {
+			cameraPosition[0] = 0;
+			cameraPosition[1] = 18;
+			cameraPosition[2] = -13;
+		}
+		
+	}
+
+	public void toggleCameraView() {
+		cameraVisible = !cameraVisible;
+	}
+
+	public void cameraJump() {
+		if (jumpStartTime + 1000 > System.currentTimeMillis())
+			return;
+		jumpStartTime = System.currentTimeMillis();
+		jumpVelocity = 4f;
+	}
+
 	private double calcPrevFrame(double frame, float step) {
 		return frame - step * 30;
 	}
@@ -518,9 +592,9 @@ public class CoreLogic {
 			return mFakeMedia.toggleStartStop();
 		}
 	}
-	
+
 	public boolean isPlaying() {
-		if(mMedia != null) {
+		if (mMedia != null) {
 			return mMedia.isPlaying();
 		} else {
 			return mFakeMedia.isPlaying();
@@ -530,7 +604,7 @@ public class CoreLogic {
 	public void rewind() {
 		seekTo(0);
 	}
-	
+
 	public void seekTo(int pos) {
 		if (mMedia != null) {
 			mMedia.seekTo(pos);
@@ -538,107 +612,107 @@ public class CoreLogic {
 			mFakeMedia.seekTo(pos);
 		}
 	}
-	
+
 	public int getDulation() {
-		if(mMedia != null) {
+		if (mMedia != null) {
 			return mMedia.getDuration();
 		} else {
 			return mFakeMedia.getDuration();
 		}
 	}
-	
+
 	public float[] getRotationMatrix() {
 		return mRMatrix;
 	}
-	
-	public void onDraw(final int pos) {}
 
+	public void onDraw(final int pos) {
+	}
 
 	public void storeState() {
 		SharedPreferences sp = mCtx.getSharedPreferences("default", Context.MODE_PRIVATE);
 		SharedPreferences.Editor ed = sp.edit();
-		
+
 		// model & motion
-		if(mMiku != null) {
+		if (mMiku != null) {
 			ed.putInt("ModelNum", mMiku.size());
-			for(int i = 0; i < mMiku.size(); i++) {
+			for (int i = 0; i < mMiku.size(); i++) {
 				Miku m = mMiku.get(i);
 				ed.putString(String.format("Model%d", i), m.mModel.mFileName);
-				if(m.mMotion != null) {
+				if (m.mMotion != null) {
 					ed.putString(String.format("Motion%d", i), m.mMotion.mFileName);
 				}
 			}
 		} else {
 			ed.putInt("ModelNum", 0);
 		}
-		
+
 		// camera
-		if(mCamera != null) {
+		if (mCamera != null) {
 			ed.putString("Camera", mCamera.mFileName);
 		}
-		
+
 		// music
-		if(mMedia != null) {
+		if (mMedia != null) {
 			ed.putString("Music", mMediaName);
 			int cur = mMedia.getCurrentPosition();
-			if(cur + 100 < mMedia.getDuration()) {
+			if (cur + 100 < mMedia.getDuration()) {
 				ed.putInt("Position", cur);
 			}
 		} else {
 			int cur = mFakeMedia.getCurrentPosition();
-			if(cur + 100 < mFakeMedia.getDuration()) {
+			if (cur + 100 < mFakeMedia.getDuration()) {
 				ed.putInt("Position", cur);
 			}
 		}
-		
+
 		ed.commit();
 		Log.d("CoreLogic", "Store State");
 	}
-	
+
 	public void restoreState() {
 		SharedPreferences sp = mCtx.getSharedPreferences("default", Context.MODE_PRIVATE);
-		
+
 		try {
 			// model & motion
 			int num = sp.getInt("ModelNum", 0);
-			
+
 			String model[] = new String[num];
 			String motion[] = new String[num];
-			for(int i = 0; i < num; i++) {
-				model[i]  = sp.getString(String.format("Model%d", i), null);
+			for (int i = 0; i < num; i++) {
+				model[i] = sp.getString(String.format("Model%d", i), null);
 				motion[i] = sp.getString(String.format("Motion%d", i), null);
 			}
 
 			String camera = sp.getString("Camera", null);
 			String music = sp.getString("Music", null);
 			int pos = sp.getInt("Position", 0);
-			
+
 			// crear preferences
 			Editor ed = sp.edit();
 			ed.clear();
 			ed.commit();
-			
+
 			// load data
-			for(int i = 0; i < num; i++) {
-				if(motion[i] == null) {
-					if(model[i].endsWith(".x")) {
+			for (int i = 0; i < num; i++) {
+				if (motion[i] == null) {
+					if (model[i].endsWith(".x")) {
 						loadAccessory(model[i]);
 					} else {
-						loadStage(model[i]);						
+						loadStage(model[i]);
 					}
 				} else {
 					loadModelMotion(model[i], motion[i]);
 				}
 			}
-			
-			if(camera != null) {
-				loadCamera(camera);
-			}			
 
-			if(music != null) {
+			if (camera != null) {
+				loadCamera(camera);
+			}
+
+			if (music != null) {
 				loadMedia(music);
-				if(mMedia != null) {
-					mMedia.seekTo(pos);					
+				if (mMedia != null) {
+					mMedia.seekTo(pos);
 				}
 			} else {
 				mFakeMedia.seekTo(pos);
@@ -646,8 +720,8 @@ public class CoreLogic {
 
 			// restore
 			storeState();
-		
-		} catch(IOException e) {
+
+		} catch (IOException e) {
 			Editor ed = sp.edit();
 			ed.clear();
 			ed.commit();
@@ -655,67 +729,66 @@ public class CoreLogic {
 	}
 
 	public void setScreenSize(int width, int height) {
-		mWidth	= width;
-		mHeight	= height;
+		mScreenWidth = width;
+		mScreenHeight = height;
+		mRenderWidth = width;
+		mRenderHeight = height;
 	}
-	
+
+	public void setRenderSize(int width, int height) {
+		mRenderWidth = width;
+		mRenderHeight = height;
+	}
+
 	public int getScreenWidth() {
-		return mWidth;
+		return mScreenWidth;
 	}
-	
+
 	public int getScreenHeight() {
-		return mHeight;
+		return mScreenHeight;
 	}
 
 	public ArrayList<Miku> getMiku() {
 		return mMiku;
 	}
-	
+
 	public void returnMiku(Miku miku) {
-		
+
 	}
-	
+
 	public String getBG() {
 		return mBG;
 	}
-	
+
 	public void returnMikuStage(Miku stage) {
-		
+
 	}
-	
+
 	public float[] getProjectionMatrix() {
 		return mPMatrix;
 	}
-	
+
 	public boolean checkFileIsPrepared() {
 		File files = new File(mBase + "Data/toon0.bmp");
 		return files.exists();
 	}
-	
+
 	public File[] getModelSelector() {
-		String[] ext = {
-				".bmp",
-				".jpg",
-				".png",
-				".tga"
-			};
-		
-		String[] extm = {
-				".pmd",
-				".x"
-			};
-		
+		String[] ext = { ".bmp", ".jpg", ".png", ".tga" };
+
+		String[] extm = { ".pmd", ".x" };
+
 		File[] model = listFiles(mBase + "UserFile/Model/", extm);
-		File[] bg    = listFiles(mBase + "UserFile/BackGround/", ext);
-		File[] acc   = listFiles(mBase + "UserFile/Accessory/", ".x");
+		File[] bg = listFiles(mBase + "UserFile/BackGround/", ext);
+		File[] acc = listFiles(mBase + "UserFile/Accessory/", ".x");
 		File[] f = new File[model.length + bg.length + acc.length];
-		for(int i = 0; i < model.length; i++) {
+		for (int i = 0; i < model.length; i++) {
 			f[i] = model[i];
 		}
-		for(int i = 0; i < bg.length; i++) {
+		for (int i = 0; i < bg.length; i++) {
 			f[i + model.length] = bg[i];
 		}
-		for(int i = 0; i < acc.length; i++) {
+		for (int i = 0; i < acc.length; i++) {
 			f[i + model.length + bg.length] = acc[i];
 		}
 		return f;
@@ -728,16 +801,9 @@ public class CoreLogic {
 	public File[] getCameraSelector() {
 		return listFiles(mBase + "UserFile/Motion/", ".vmd");
 	}
-	
+
 	public File[] getMediaSelector() {
-		String[] ext = {
-			".mp3",
-			".wav",
-			".3gp",
-			".mp4",
-			".m4a",
-			".ogg"
-		};
+		String[] ext = { ".mp3", ".wav", ".3gp", ".mp4", ".m4a", ".ogg" };
 		return listFiles(mBase + "UserFile/Wave/", ext);
 	}
 
@@ -746,42 +812,42 @@ public class CoreLogic {
 		exts[0] = ext;
 		return listFiles(dir, exts);
 	}
-	
+
 	public File[] listFiles(String dir, String[] ext) {
 		File file = new File(dir);
 		ArrayList<File> list = listRecursive1(file, ext);
-		return (File[])list.toArray(new File[0]);
+		return (File[]) list.toArray(new File[0]);
 	}
-	
+
 	private ArrayList<File> listRecursive1(File file, String[] ext) {
 		ArrayList<File> files = new ArrayList<File>();
-		if(file.exists()) {
-			if(file.isFile()) {
-				for(int i = 0; i < ext.length; i++) {
-					if(file.getName().endsWith(ext[i])) {
+		if (file.exists()) {
+			if (file.isFile()) {
+				for (int i = 0; i < ext.length; i++) {
+					if (file.getName().endsWith(ext[i])) {
 						files.add(file);
 						break;
 					}
 				}
 			} else {
 				File[] list = file.listFiles();
-				for(int i = 0; i < list.length; i++) {
+				for (int i = 0; i < list.length; i++) {
 					files.addAll(listRecursive1(list[i], ext));
 				}
 			}
 		}
-		
+
 		return files;
 	}
-	
+
 	public String getRawResourceString(int id) {
 		char[] buf = new char[1024];
 		StringWriter sw = new StringWriter();
-		
+
 		BufferedReader is = new BufferedReader(new InputStreamReader(mCtx.getResources().openRawResource(id)));
 		int n;
 		try {
-			while((n = is.read(buf)) != -1) {
+			while ((n = is.read(buf)) != -1) {
 				sw.write(buf, 0, n);
 			}
 		} catch (IOException e) {
@@ -789,44 +855,44 @@ public class CoreLogic {
 			e.printStackTrace();
 			return null;
 		}
-		
+
 		return sw.toString();
 	}
-	
+
 	public void logMemoryUsage() {
 		Runtime runtime = Runtime.getRuntime();
-		Log.d("CoreLogic", "totalMemory[KB] = " + (int)(runtime.totalMemory()/1024));
-		Log.d("CoreLogic", "freeMemory[KB] = " + (int)(runtime.freeMemory()/1024));
-		Log.d("CoreLogic", "usedMemory[KB] = " + (int)( (runtime.totalMemory() - runtime.freeMemory())/1024) );
-		Log.d("CoreLogic", "maxMemory[KB] = " + (int)(runtime.maxMemory()/1024));
+		Log.d("CoreLogic", "totalMemory[KB] = " + (int) (runtime.totalMemory() / 1024));
+		Log.d("CoreLogic", "freeMemory[KB] = " + (int) (runtime.freeMemory() / 1024));
+		Log.d("CoreLogic", "usedMemory[KB] = " + (int) ((runtime.totalMemory() - runtime.freeMemory()) / 1024));
+		Log.d("CoreLogic", "maxMemory[KB] = " + (int) (runtime.maxMemory() / 1024));
 	}
-	
+
 	static boolean isArm() {
 		return Build.CPU_ABI.contains("armeabi");
 	}
-	
+
 	// ///////////////////////////////////////////////////////////
 	// Some common methods
 
 	private void createTextureCache(ModelFile pmd) {
 		// create texture cache
-		for(Material mat: pmd.getMaterial()) {
-			if(mat.texture != null) {
+		for (Material mat : pmd.getMaterial()) {
+			if (mat.texture != null) {
 				TextureFile.createCache(mBase, mat.texture, 1);
 			}
-			if(mat.sphere != null) {
+			if (mat.sphere != null) {
 				TextureFile.createCache(mBase, mat.sphere, 1);
 			}
 		}
 	}
-	
+
 	private void createTextureCache(ModelBuilder pmd) {
 		// create texture cache
-		for(Material mat: pmd.mMaterial) {
-			if(mat.texture != null) {
+		for (Material mat : pmd.mMaterial) {
+			if (mat.texture != null) {
 				TextureFile.createCache(mBase, mat.texture, 1);
 			}
-			if(mat.sphere != null) {
+			if (mat.sphere != null) {
 				TextureFile.createCache(mBase, mat.sphere, 1);
 			}
 		}
@@ -835,23 +901,23 @@ public class CoreLogic {
 	private void calcCurrentTime() {
 		// update previous time
 		mPrevTime = mCurTime;
-		
+
 		// calculate current time
 		if (mMedia != null) {
 			mCurTime = mMedia.getCurrentPosition();
-			if(mMedia.isPlaying()) {
+			if (mMedia.isPlaying()) {
 				long timeLocal = System.currentTimeMillis();
 				if (Math.abs(timeLocal - mStartTime - mCurTime) > 500 || mMedia.isPlaying() == false) {
 					mStartTime = timeLocal - mCurTime;
 				} else {
 					mCurTime = timeLocal - mStartTime;
-				}				
+				}
 			}
 		} else {
 			mCurTime = mFakeMedia.getCurrentPosition();
 		}
 	}
-	
+
 	protected double getCurrentFrames(int max_frame) {
 		double frame;
 		frame = ((float) mCurTime * 30.0 / 1000.0);
@@ -862,55 +928,70 @@ public class CoreLogic {
 
 		return frame;
 	}
-	
+
 	private long getDeltaTimeMills() {
 		return mCurTime - mPrevTime;
 	}
 
-	protected void setCameraByVMDFrame(double frame) {
-		if (mCamera != null) {
+	protected void setCameraByVMDFrame(double frame, float dx) {
+		if (cameraMode == CAMERA_MODE_MOTION && mCamera != null) {
 			CameraPair cp = mCamera.findCamera((float) frame, mCameraPair);
 			CameraIndex c = mCamera.interpolateLinear(cp, (float) frame, mCameraIndex);
 			if (c != null) {
-				setCamera(c.length, c.location, c.rotation, c.view_angle, mWidth, mHeight);
+				setCamera(c.length * 0.8f - 2f, dx, c.location, c.rotation, c.view_angle, mRenderWidth, mRenderHeight);
 			}
 		} else {
+			float t = (System.currentTimeMillis() - jumpStartTime) / 1000.0f;
+			float dy = jumpVelocity * t - 4.8f * t * t;
+			if (dy < 0)
+				dy = 0;
+			//Log.d("", "dy:" + dy + "(" + jumpStartTime);
 			if (mAngle == 0) {
-				mCameraIndex.location[0] = 0;
-				mCameraIndex.location[1] = 10; // 13
-				mCameraIndex.location[2] = 0;
-				mCameraIndex.rotation[0] = 0;
-				mCameraIndex.rotation[1] = 0;
-				mCameraIndex.rotation[2] = 0;
-				setCamera(-35f, mCameraIndex.location, mCameraIndex.rotation, 45, mWidth, mHeight); // -38f
+				mCameraIndex.location[0] = 0  + cameraPosition[0];
+				mCameraIndex.location[1] = dy * 50 + cameraPosition[1];
+				mCameraIndex.location[2] =  + cameraPosition[2];
+				mCameraIndex.rotation[0] = -mCameraOrientation[2] * 180 / 3.14159f - 90;
+				mCameraIndex.rotation[1] = -mCameraOrientation[0] * 180 / 3.14159f;
+				mCameraIndex.rotation[2] = -mCameraOrientation[1] * 180 / 3.14159f;
+				setCamera(-cameraDistance, dx, mCameraIndex.location, mCameraIndex.rotation, 120, mRenderWidth, mRenderHeight); // -38f
 			} else {
-				mCameraIndex.location[0] = 0;
-				mCameraIndex.location[1] = 10;
-				mCameraIndex.location[2] = 0;
-				mCameraIndex.rotation[0] = 0;
-				mCameraIndex.rotation[1] = 0;
-				mCameraIndex.rotation[2] = 0;
-				setCamera(-30f, mCameraIndex.location, mCameraIndex.rotation, 45, mWidth, mHeight);
+				mCameraIndex.location[0] = 0 + cameraPosition[0];
+				mCameraIndex.location[1] = dy * 50 + cameraPosition[1];
+				mCameraIndex.location[2] = 0  + cameraPosition[2];
+				mCameraIndex.rotation[0] = -mCameraOrientation[2] * 180 / 3.14159f - 90;
+				mCameraIndex.rotation[1] = -mCameraOrientation[0] * 180 / 3.14159f;
+				mCameraIndex.rotation[2] = -mCameraOrientation[1] * 180 / 3.14159f;
+				setCamera(-10f, dx, mCameraIndex.location, mCameraIndex.rotation, 120, mRenderWidth, mRenderHeight);
 			}
 		}
 	}
 
-	protected void setCamera(float d, float[] pos, float[] rot, float angle, int width, int height) {
+	@TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
+	protected void setCamera(float d, float dx, float[] pos, float[] rot, float angle, int width, int height) {
 		// Projection Matrix
 		float s = (float) Math.sin(angle * Math.PI / 360);
 		Matrix.setIdentityM(mPMatrix, 0);
 		if (mAngle == 90) {
 			Matrix.frustumM(mPMatrix, 0, -s, s, -s * height / width, s * height / width, 1f, 3500f);
 		} else {
-			Matrix.frustumM(mPMatrix, 0, -s * width / height, s * width / height, -s, s, 1f, 3500f);
+			//Matrix.frustumM(mPMatrix, 0, -s * width / height, s * width / height, -s, s, 1f, 3500f);
+			if (Matrix.length(pos[0], pos[1], pos[2]) < 20) {
+				Matrix.perspectiveM(mPMatrix, 0, 100f, width * 1.0f / height,  0.5f, 300f);
+			} else {
+				Matrix.perspectiveM(mPMatrix, 0, 100f, width * 1.0f / height,  4f, 2000f);				
+			}
 		}
 		Matrix.scaleM(mPMatrix, 0, 1, 1, -1); // to right-handed
 		Matrix.rotateM(mPMatrix, 0, mAngle, 0, 0, -1); // rotation
 
-		Matrix.multiplyMM(mPMatrix, 0, mPMatrix, 0, mRMatrix, 0);	// device rotation
+		Matrix.multiplyMM(mPMatrix, 0, mPMatrix, 0, mRMatrix, 0); // device rotation
 
 		// camera
-		Matrix.translateM(mPMatrix, 0, 0, 0, -d);
+		if (cameraMode == CAMERA_MODE_SENSOR) {
+			Matrix.translateM(mPMatrix, 0, -dx, 0, 0.01f); // 
+		} else {
+			Matrix.translateM(mPMatrix, 0, -dx, 0, -d); // 
+		}
 		Matrix.rotateM(mPMatrix, 0, rot[2], 0, 0, 1f);
 		Matrix.rotateM(mPMatrix, 0, rot[0], 1f, 0, 0);
 		Matrix.rotateM(mPMatrix, 0, rot[1], 0, 1f, 0);
@@ -929,7 +1010,7 @@ public class CoreLogic {
 			mCameraIndex.rotation[0] = 0;
 			mCameraIndex.rotation[1] = 0;
 			mCameraIndex.rotation[2] = 0;
-			setCamera(-35f, mCameraIndex.location, mCameraIndex.rotation, 45, mWidth, mHeight); // -38f
+			setCamera(-35f, 0, mCameraIndex.location, mCameraIndex.rotation, 45, mScreenWidth, mScreenHeight); // -38f
 		} else {
 			mCameraIndex.location[0] = 0;
 			mCameraIndex.location[1] = 10;
@@ -937,8 +1018,65 @@ public class CoreLogic {
 			mCameraIndex.rotation[0] = 0;
 			mCameraIndex.rotation[1] = 0;
 			mCameraIndex.rotation[2] = 0;
-			setCamera(-30f, mCameraIndex.location, mCameraIndex.rotation, 45, mWidth, mHeight);
+			setCamera(-30f, 0, mCameraIndex.location, mCameraIndex.rotation, 45, mScreenWidth, mScreenHeight);
 		}
+	}
+
+	
+	private void checkKeyState() {
+		float d = 0.5f;
+		if (keyState[KeyEvent.KEYCODE_DPAD_UP]) {
+			if (cameraMode == CAMERA_MODE_SENSOR) {
+				cameraPosition[0] += Math.sin(mCameraOrientation[0]) * d;
+				cameraPosition[2] += Math.cos(mCameraOrientation[0]) * d;
+			} else {
+				cameraDistance -= d;
+			}
+		}
+		if (keyState[KeyEvent.KEYCODE_DPAD_DOWN]) {
+			if (cameraMode == CAMERA_MODE_SENSOR) {
+				cameraPosition[0] -= Math.sin(mCameraOrientation[0]) * d;
+				cameraPosition[2] -= Math.cos(mCameraOrientation[0]) * d;
+			} else {
+				cameraDistance += d;
+			}
+		}
+
+		if (keyState[KeyEvent.KEYCODE_DPAD_LEFT]) {
+			cameraPosition[0] -= Math.cos(mCameraOrientation[0]) * d;
+			cameraPosition[2] += Math.sin(mCameraOrientation[0]) * d;
+			cameraMode = CAMERA_MODE_SENSOR;
+		}
+
+		if (keyState[KeyEvent.KEYCODE_DPAD_RIGHT]) {
+			cameraPosition[0] += Math.cos(mCameraOrientation[0]) * d;
+			cameraPosition[2] -= Math.sin(mCameraOrientation[0]) * d;
+			cameraMode = CAMERA_MODE_SENSOR;
+		}
+		if (analogInput[2] > 0.1 || analogInput[2] < -0.1) {
+			// X
+			cameraPosition[0] += Math.cos(mCameraOrientation[0]) * d * analogInput[2] * 2;
+			cameraPosition[2] -= Math.sin(mCameraOrientation[0]) * d * analogInput[2] * 2;
+		}
+
+		if (analogInput[1] > 0.1 || analogInput[1] < -0.1) {
+			// Y
+			cameraPosition[0] -= Math.sin(mCameraOrientation[0]) * d * analogInput[1] * 2;
+			cameraPosition[2] -= Math.cos(mCameraOrientation[0]) * d * analogInput[1] * 2;
+		}
+
+		if (analogInput[3] > 0.1 || analogInput[3] < -0.1) {
+			cameraPosition[1] -= d * analogInput[3];
+		}
+
+		if (keyState[KeyEvent.KEYCODE_W]) {
+			cameraPosition[1] += d*0.2f;
+		}
+
+		if (keyState[KeyEvent.KEYCODE_S]) {
+			cameraPosition[1] -= d*0.2f;
+		}
+		
 	}
 
 }

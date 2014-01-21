@@ -3,19 +3,25 @@ package jp.gauzau.MikuMikuDroid;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-
+import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.AlertDialog.Builder;
 import android.content.DialogInterface;
+import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.opengl.Matrix;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
@@ -28,6 +34,7 @@ import android.widget.SeekBar;
 import android.widget.SeekBar.OnSeekBarChangeListener;
 import android.widget.Toast;
 
+@TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
 public class MikuMikuDroid extends Activity implements SensorEventListener {
 	// View
 	private MMGLSurfaceView mMMGLSurfaceView;
@@ -50,9 +57,9 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		
-//		mSM = (SensorManager)getSystemService(SENSOR_SERVICE);
-//		mAx = mSM.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-//		mMg = mSM.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+		mSM = (SensorManager)getSystemService(SENSOR_SERVICE);
+		mAx = mSM.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+		mMg = mSM.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
 
 		mCoreLogic = new CoreLogic(this) {
 			@Override
@@ -105,10 +112,12 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			}
 		};
 		mCoreLogic.setScreenAngle(0);
+		mCoreLogic.setCameraPosition(cameraPos);
 
 		mRelativeLayout = new RelativeLayout(this);
 		mRelativeLayout.setVerticalGravity(Gravity.BOTTOM);
 		mMMGLSurfaceView = new MMGLSurfaceView(this, mCoreLogic);
+
 	
 		LayoutParams p = new LayoutParams(LayoutParams.FILL_PARENT, LayoutParams.WRAP_CONTENT);
 		p.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
@@ -187,22 +196,36 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		setContentView(mRelativeLayout);
 
 		if (mCoreLogic.checkFileIsPrepared() == false) {
-			Builder ad;
+			/*
+			AlertDialog.Builder ad;
 			ad = new AlertDialog.Builder(this);
 			ad.setTitle(R.string.setup_alert_title);
 			ad.setMessage(R.string.setup_alert_text);
 			ad.setPositiveButton(R.string.select_ok, null);
 			ad.show();
+			*/
 		}
 	}
 	
 	@Override
+	protected void onStart() {
+		super.onStart();
+		mRelativeLayout.setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | 0x00001000); // .SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+	}
+
+	@Override
 	protected void onResume() {
 		super.onResume();
+		this.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+		mRelativeLayout.setKeepScreenOn(true);
 		mMMGLSurfaceView.onResume();
 		if(mAx != null && mMg != null) {
 			mSM.registerListener(this, mAx, SensorManager.SENSOR_DELAY_GAME);
-			mSM.registerListener(this, mMg, SensorManager.SENSOR_DELAY_GAME);			
+			mSM.registerListener(this, mMg, SensorManager.SENSOR_DELAY_GAME);
+			Sensor gs = mSM.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+			if (gs != null) {
+				mSM.registerListener(this, gs, SensorManager.SENSOR_DELAY_FASTEST);
+			}
 		}
 	}
 
@@ -211,7 +234,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		super.onPause();
 		mCoreLogic.pause();
 		mMMGLSurfaceView.onPause();
-		if(mAx != null && mMg != null) {
+		if(mAx != null || mMg != null) {
 			mSM.unregisterListener(this);
 		}
 	}
@@ -440,6 +463,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		ad.show();
 	}
 
+	@SuppressLint("NewApi")
 	@Override
 	public boolean onTouchEvent(MotionEvent event) {
 		if(event.getAction() == MotionEvent.ACTION_UP) {
@@ -447,6 +471,9 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 				mPlayPauseButton.setBackgroundResource(R.drawable.ic_media_pause);
 			} else {
 				mPlayPauseButton.setBackgroundResource(R.drawable.ic_media_play);					
+			}
+			if (mPlayPauseButton.getVisibility() == View.VISIBLE) {
+				mRelativeLayout.setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | 0x00001000); // .SYSTEM_UI_FLAG_IMMERSIVE_STICKY
 			}
 			
 			mSeekBar.setVisibility(mSeekBar.getVisibility() == SeekBar.VISIBLE ? SeekBar.INVISIBLE : SeekBar.VISIBLE);
@@ -479,18 +506,197 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		
 	}
 
+	private float[] inR = new float[16];
+	private float[] orientationCurrent = new float[3];
+	private float[] orientation = new float[]{0,0,-3.14159f/2}; // [yaw roll pitch] rad
+	private float yRotationBase = 8; // yaw
+	private float xRotationBase = 0; // pitch
+	private float[] gravHistory = new float[10]; // Gravity (G)
+	private int gravHistoryPos = 0;
+	private long lastGyroTime = 0;
 	@Override
 	public void onSensorChanged(SensorEvent event) {
-		if (event.accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE) {
-			return;
-		}
 	
 		if(event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
 			System.arraycopy(event.values, 0, mAxV, 0, 3);
+			gravHistoryPos = (gravHistoryPos + 1) % gravHistory.length;
+			gravHistory[gravHistoryPos] = (float) Math.sqrt(mAxV[0] * mAxV[0] + mAxV[1]*mAxV[1] + mAxV[2]*mAxV[2]) / 9.8f;
+		} else if(event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
+			// values = [yaw pitch roll]
+			//Log.d("Sensor","TYPE_GYROSCOPE " + event.values[0] + "," + event.values[1] + "," + event.values[2]+ " ("+  event.timestamp);
+			if (lastGyroTime > 0 && yRotationBase < 7) {
+				float dt = (event.timestamp - lastGyroTime) * 0.000000001f * 1.1f;
+				// yaw rotation
+				orientation[0] -= -Math.sin(orientation[2]) * Math.cos(orientation[1]) * event.values[0] * dt; // virtual Y => Y
+				//orientation[2] += Math.sin(orientation[1]) * event.values[0] * d; // virtual Y => X
+				orientation[2] += (Math.sin(orientation[1]) * event.values[0] - Math.cos(orientation[2]) * Math.abs(event.values[0]))  * dt; // virtual Y => X
+				orientation[1] += -(Math.cos(orientation[2])) * event.values[0] * dt; // virtual Y => Z
+				// pitch rotation
+				orientation[2] += Math.cos(orientation[1]) * event.values[1] * dt; // virtual X
+				orientation[0] += Math.sin(orientation[1]) * event.values[1] * dt; // virtual X => Y
+				// roll rotation
+				orientation[1] += event.values[2] * dt; // virtual Z roll
+			}
+			lastGyroTime = event.timestamp;
 		} else if(event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
+			//Log.d("Sensor","TYPE_MAGNETIC_FIELD " + event.values[0] + "," + event.values[1] + "," + event.values[2]+ " ("+  event.timestamp);
+			if (event.accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE) {
+				//return;
+			}
 			System.arraycopy(event.values, 0, mMgV, 0, 3);			
 		}
 		
-		SensorManager.getRotationMatrix(mCoreLogic.getRotationMatrix(), null, mAxV, mMgV);
+		if (mAxV[0] == 0 || mMgV[0] == 0) return; // wait for initialize (FIXME!
+		if (gravHistory[gravHistoryPos] < 0.4) { // 0.3G
+			for (float f: gravHistory) {
+			//	Log.d("","gh:"+f);
+			}
+			if (gravHistory[(gravHistoryPos + 5)%gravHistory.length] > 1.5) {
+				// jump!
+				Log.d("","JUMP!");
+				mCoreLogic.cameraJump();
+			}
+			return;
+		}
+		
+		
+		SensorManager.getRotationMatrix(inR, null, mAxV, mMgV);
+		SensorManager.getOrientation(inR, orientationCurrent);
+		if (yRotationBase > 7) {
+			yRotationBase = orientationCurrent[0];
+			orientation[0] = yRotationBase;
+		}
+		orientationCurrent[0] -= yRotationBase;
+		orientationCurrent[2] -= xRotationBase;
+		for (int i = 0; i < 3; i++) {
+			if (orientationCurrent[i] > orientation[i] + Math.PI) {
+				orientation[i] += Math.PI * 2;
+			}
+			if (orientationCurrent[i] < orientation[i] - Math.PI) {
+				orientation[i] -= Math.PI * 2;
+			}
+			
+			orientation[i] = (orientation[i]*199 + orientationCurrent[i]) / 200;
+		}
+		
+		if (Math.abs(mCoreLogic.analogInput[0]) > 0.1) {
+			yRotationBase -= mCoreLogic.analogInput[0] * 0.005f;
+			orientation[0] += mCoreLogic.analogInput[0] * 0.005f;
+		}
+		if (Math.abs(mCoreLogic.analogInput[4]) > 0.1) {
+			xRotationBase -= mCoreLogic.analogInput[4] * 0.005f;
+			orientation[2] += mCoreLogic.analogInput[4] * 0.005f;
+		}
+		if (Math.abs(mCoreLogic.analogInput[5]) > 0.1) {
+			xRotationBase += mCoreLogic.analogInput[5] * 0.005f;
+			orientation[2] -= mCoreLogic.analogInput[5] * 0.005f;
+		}
+		
+		if (mCoreLogic.keyState[KeyEvent.KEYCODE_A] || mCoreLogic.keyState[KeyEvent.KEYCODE_PAGE_UP]) {
+			yRotationBase += 0.01f;
+			orientation[0] -= 0.01f;
+		}
+		if (mCoreLogic.keyState[KeyEvent.KEYCODE_D] || mCoreLogic.keyState[KeyEvent.KEYCODE_PAGE_DOWN]) {
+			yRotationBase -= 0.01f;
+			orientation[0] += 0.01f;
+		}
+		
+		if (mCoreLogic.keyState[KeyEvent.KEYCODE_F]) {
+			xRotationBase -= 0.01f;
+			orientation[2] += 0.01f;
+		}
+		if (mCoreLogic.keyState[KeyEvent.KEYCODE_R]) {
+			xRotationBase += 0.01f;
+			orientation[2] -= 0.01f;
+		}
+		
+		//Log.d("Sensor","Orientation " + orientation[0] + "," + orientation[1] + "," + orientation[2]);
+		mCoreLogic.setCameraOrientation(orientation);
 	}
+	
+	float cameraPos[] = new float[]{0,17,-13};
+	
+
+	@Override
+	public boolean onKeyDown(int keyCode, KeyEvent event) {
+		if (keyCode >= 0 && keyCode < mCoreLogic.keyState.length) {
+			mCoreLogic.keyState[keyCode] = true;
+		}
+		switch(keyCode) {
+		case KeyEvent.KEYCODE_DPAD_UP:
+		case KeyEvent.KEYCODE_DPAD_DOWN:
+		case KeyEvent.KEYCODE_DPAD_LEFT:
+		case KeyEvent.KEYCODE_DPAD_RIGHT:
+		case KeyEvent.KEYCODE_W:
+		case KeyEvent.KEYCODE_S:
+			mCoreLogic.analogInput[0] = 0;
+			mCoreLogic.analogInput[1] = 0;
+			break;
+		case KeyEvent.KEYCODE_M:
+			openOptionsMenu();
+			break;
+		case KeyEvent.KEYCODE_BUTTON_R1:
+		//case KeyEvent.KEYCODE_D:
+			yRotationBase -= 0.05f;
+			break;
+		case KeyEvent.KEYCODE_BUTTON_L1:
+		//case KeyEvent.KEYCODE_A:
+			yRotationBase += 0.05f;
+			break;
+		case KeyEvent.KEYCODE_V:
+		case KeyEvent.KEYCODE_BUTTON_Y: // ^
+			mCoreLogic.toggleViewMode();
+			break;
+		case KeyEvent.KEYCODE_C:
+		case KeyEvent.KEYCODE_BUTTON_X: // []
+			mCoreLogic.toggleCameraView();
+			break;
+		case KeyEvent.KEYCODE_X:
+		case KeyEvent.KEYCODE_BUTTON_B: // O
+			mCoreLogic.cameraJump();
+			break;
+		case KeyEvent.KEYCODE_BUTTON_A: // X
+		case KeyEvent.KEYCODE_SPACE:
+			mRelativeLayout.setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
+			mSeekBar.setVisibility(View.INVISIBLE);
+			mPlayPauseButton.setVisibility(View.INVISIBLE);
+			mRewindButton.setVisibility(View.INVISIBLE);
+			mCoreLogic.toggleStartStop();
+			break;
+		default:
+			return super.onKeyDown(keyCode, event);
+		}
+		//mCoreLogic.setCameraPosition(cameraPos);
+		return true;
+	}
+
+	@Override
+	public boolean onKeyUp(int keyCode, KeyEvent event) {
+		if (keyCode >= 0 && keyCode < mCoreLogic.keyState.length) {
+			mCoreLogic.keyState[keyCode] = false;
+		}
+		return super.onKeyUp(keyCode, event);
+	}
+
+	@Override
+	public boolean onGenericMotionEvent(MotionEvent event) {
+		if (event.getAction() == MotionEvent.ACTION_MOVE) {
+			Log.d("MotionEvent" ,"Action: " + event.getAction() + " s:" + event.getSource());
+			float h1 = event.getAxisValue(MotionEvent.AXIS_X);
+			float v1 = event.getAxisValue(MotionEvent.AXIS_Y);
+			float h2 = event.getAxisValue(MotionEvent.AXIS_Z);
+			float v2 = event.getAxisValue(MotionEvent.AXIS_RZ);
+			mCoreLogic.analogInput[0] = h1;
+			mCoreLogic.analogInput[1] = v1;
+			mCoreLogic.analogInput[2] = h2;
+			mCoreLogic.analogInput[3] = v2;
+			mCoreLogic.analogInput[4] = event.getAxisValue(MotionEvent.AXIS_LTRIGGER);
+			mCoreLogic.analogInput[5] = event.getAxisValue(MotionEvent.AXIS_RTRIGGER);
+			return true;
+		}
+		return super.onGenericMotionEvent(event);
+	}
+	
+	
+	
 }

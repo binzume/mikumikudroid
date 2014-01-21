@@ -45,6 +45,10 @@ public class MikuRendererBase implements Renderer {
 		mCoreLogic.setScreenSize(width, height);
 		mCoreLogic.setDefaultCamera();
 	}
+	
+	public void destroy() {
+		
+	}
 
 
 	// ///////////////////////////////////////////////////////////
