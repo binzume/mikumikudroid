@@ -380,9 +380,8 @@ public class MikuRendererGLES20 extends MikuRendererBase {
 	@SuppressLint("WrongCall")
 	@Override
 	public void onDrawFrame(GL10 gl) {
-		long start = System.currentTimeMillis();
 		// mLightDir[0] = -0.5f; mLightDir[1] = -1.0f; mLightDir[2] = -0.5f;	// in left-handed region
-		mLightDir[0] = 0.5f; mLightDir[1] = 1.0f; mLightDir[2] = 0.5f;	// in left-handed region
+		mLightDir[0] = -0.5f; mLightDir[1] = 1.0f; mLightDir[2] = -0.5f;	// in left-handed region
 		Vector.normalize(mLightDir);
 		int pos = mCoreLogic.applyCurrentMotion();
 		String bg = mCoreLogic.getBG();

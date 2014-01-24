@@ -3,6 +3,7 @@ package jp.gauzau.MikuMikuDroid;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.Activity;
@@ -15,7 +16,6 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.opengl.Matrix;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
@@ -25,6 +25,7 @@ import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
@@ -42,6 +43,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 	private SeekBar mSeekBar;
 	private Button mPlayPauseButton;
 	private Button mRewindButton;
+	private ScaleGestureDetector mScaleGestureDetector;
 	
 	// Model
 	private CoreLogic mCoreLogic;
@@ -205,6 +207,50 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			ad.show();
 			*/
 		}
+		
+		mScaleGestureDetector = new ScaleGestureDetector(this,
+				new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+					private float x = 0, y = 0;
+					@Override
+					public boolean onScaleBegin(ScaleGestureDetector detector) {
+						Log.d("", "onScaleBegin : " + detector.getScaleFactor());
+						x = detector.getFocusX();
+						y = detector.getFocusY();
+						return super.onScaleBegin(detector);
+					}
+
+					@Override
+					public void onScaleEnd(ScaleGestureDetector detector) {
+						Log.d("", "onScaleEnd : " + detector.getScaleFactor());
+						super.onScaleEnd(detector);
+					}
+
+					@Override
+					public boolean onScale(ScaleGestureDetector detector) {
+						//scrollBy((int) (-(getScrollX() + detector.getFocusX()) * (1.0f - detector.getScaleFactor())),
+						//		(int) (-(getScrollY() + detector.getFocusY()) * (1.0f - detector.getScaleFactor())));
+						float d = detector.getCurrentSpan() - detector.getPreviousSpan();
+						float cameraPosition[] = mCoreLogic.getCameraPositionAsRef();
+						float mCameraOrientation[] = mCoreLogic.getCameraOrientationAsRef();
+						
+						cameraPosition[0] += Math.sin(mCameraOrientation[0]) * d * 0.1f;
+						cameraPosition[2] += Math.cos(mCameraOrientation[0]) * d * 0.1f;
+
+						float dy = detector.getFocusY() - y;
+						y = detector.getFocusY();
+						cameraPosition[1] += dy * 0.1f;
+
+						float dx = detector.getFocusX() - x;
+						x = detector.getFocusX();
+
+						cameraPosition[0] -= Math.cos(mCameraOrientation[0]) * dx * 0.1f;
+						cameraPosition[2] += Math.sin(mCameraOrientation[0]) * dx * 0.1f;
+
+						// scale *= detector.getScaleFactor();
+						return true;
+					};
+				});
+		
 	}
 	
 	@Override
@@ -463,7 +509,8 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		ad.show();
 	}
 
-	@SuppressLint("NewApi")
+	float touchX = 0f;
+	float touchY = 0f;
 	@Override
 	public boolean onTouchEvent(MotionEvent event) {
 		if(event.getAction() == MotionEvent.ACTION_UP) {
@@ -481,7 +528,30 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			mRewindButton.setVisibility(mRewindButton.getVisibility() == Button.VISIBLE ? Button.INVISIBLE : Button.VISIBLE);
 			mRelativeLayout.requestLayout();
 		}
-		return false;
+		final boolean isInProgres = mScaleGestureDetector.isInProgress();
+		mScaleGestureDetector.onTouchEvent(event);
+		if (event.getAction() == MotionEvent.ACTION_DOWN) {
+			touchX = event.getX();
+			touchY = event.getY();
+		}
+		if (isInProgres || event.getPointerCount() != 1) {
+			touchX = 0f;
+		}
+		if (event.getAction() == MotionEvent.ACTION_MOVE && touchX != 0f) {
+			float dx = event.getX() - touchX;
+			float dy = event.getY() - touchY;
+			touchX = event.getX();
+			touchY = event.getY();
+			yRotationBase -= -dx * 0.01f;
+			orientation[0] += -dx * 0.01f;
+
+			xRotationBase += dy * 0.01f;
+			orientation[2] -= dy * 0.01f;
+
+			mCoreLogic.setCameraOrientation(orientation);
+		}
+
+		return isInProgres || mScaleGestureDetector.isInProgress();
 	}
 	
 	@Override
@@ -548,9 +618,6 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		
 		if (mAxV[0] == 0 || mMgV[0] == 0) return; // wait for initialize (FIXME!
 		if (gravHistory[gravHistoryPos] < 0.4) { // 0.3G
-			for (float f: gravHistory) {
-			//	Log.d("","gh:"+f);
-			}
 			if (gravHistory[(gravHistoryPos + 5)%gravHistory.length] > 1.5) {
 				// jump!
 				Log.d("","JUMP!");

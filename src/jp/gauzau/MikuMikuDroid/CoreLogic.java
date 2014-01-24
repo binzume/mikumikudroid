@@ -65,7 +65,7 @@ public class CoreLogic {
 	public static final int CAMERA_MODE_SENSOR = 2;
 	public static final int CAMERA_MODE_SENSOR2 = 3;
 	public static final int CAMERA_MODE_MAX = 4;
-	private int cameraMode = CAMERA_MODE_FIXED;
+	private int cameraMode = CAMERA_MODE_SENSOR;
 
 	public boolean keyState[] = new boolean[256];
 	public float analogInput[] = new float[16];
@@ -536,12 +536,21 @@ public class CoreLogic {
 		mCameraOrientation[2] = orientation[2];
 	}
 
+	public float[] getCameraOrientationAsRef() {
+		return mCameraOrientation;
+	}
+
 	public void setCameraPosition(float[] position) {
 		cameraPosition[0] = position[0]; // X
 		cameraPosition[1] = position[1]; // Y
 		cameraPosition[2] = position[2]; // Z
 	}
 
+	public float[] getCameraPositionAsRef() {
+		return cameraPosition;
+	}
+
+	
 	public void toggleViewMode() {
 		cameraMode = (cameraMode + 1) % CAMERA_MODE_MAX;
 		if (cameraMode == CAMERA_MODE_SENSOR2) {
