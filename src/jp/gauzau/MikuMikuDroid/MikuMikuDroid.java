@@ -235,18 +235,6 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 						
 						cameraPosition[0] += Math.sin(mCameraOrientation[0]) * d * 0.1f;
 						cameraPosition[2] += Math.cos(mCameraOrientation[0]) * d * 0.1f;
-
-						float dy = detector.getFocusY() - y;
-						y = detector.getFocusY();
-						cameraPosition[1] += dy * 0.1f;
-
-						float dx = detector.getFocusX() - x;
-						x = detector.getFocusX();
-
-						cameraPosition[0] -= Math.cos(mCameraOrientation[0]) * dx * 0.1f;
-						cameraPosition[2] += Math.sin(mCameraOrientation[0]) * dx * 0.1f;
-
-						// scale *= detector.getScaleFactor();
 						return true;
 					};
 				});
@@ -527,30 +515,59 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			mPlayPauseButton.setVisibility(mPlayPauseButton.getVisibility() == Button.VISIBLE ? Button.INVISIBLE : Button.VISIBLE);
 			mRewindButton.setVisibility(mRewindButton.getVisibility() == Button.VISIBLE ? Button.INVISIBLE : Button.VISIBLE);
 			mRelativeLayout.requestLayout();
+
 		}
-		final boolean isInProgres = mScaleGestureDetector.isInProgress();
-		mScaleGestureDetector.onTouchEvent(event);
+
+		if (event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN) {
+			if (event.getPointerCount() == 2) {
+				touchX = (event.getX(0) + event.getX(1))/2f;
+				touchY = (event.getY(0) + event.getY(1))/2f;
+			}
+		}
+		if (event.getActionMasked() == MotionEvent.ACTION_POINTER_UP) {
+			touchX = 0f;
+		}
+
 		if (event.getAction() == MotionEvent.ACTION_DOWN) {
 			touchX = event.getX();
 			touchY = event.getY();
 		}
-		if (isInProgres || event.getPointerCount() != 1) {
-			touchX = 0f;
+
+		if (event.getAction() == MotionEvent.ACTION_MOVE && event.getPointerCount() == 1) {
+			if (touchX == 0f) {
+				touchX = event.getX();
+				touchY = event.getY();
+			} else {
+				float dx = event.getX() - touchX;
+				float dy = event.getY() - touchY;
+				touchX = event.getX();
+				touchY = event.getY();
+				yRotationBase -= -dx * 0.01f;
+				orientation[0] += -dx * 0.01f;
+	
+				xRotationBase += dy * 0.01f;
+				orientation[2] -= dy * 0.01f;
+	
+				mCoreLogic.setCameraOrientation(orientation);
+			}
 		}
-		if (event.getAction() == MotionEvent.ACTION_MOVE && touchX != 0f) {
-			float dx = event.getX() - touchX;
-			float dy = event.getY() - touchY;
-			touchX = event.getX();
-			touchY = event.getY();
-			yRotationBase -= -dx * 0.01f;
-			orientation[0] += -dx * 0.01f;
+		if (event.getAction() == MotionEvent.ACTION_MOVE && event.getPointerCount() == 2) {
+			float dy = (event.getY(0) + event.getY(1))/2f - touchY;
+			float dx = (event.getX(0) + event.getX(1))/2f - touchX;
 
-			xRotationBase += dy * 0.01f;
-			orientation[2] -= dy * 0.01f;
+			touchX = (event.getX(0) + event.getX(1))/2f;
+			touchY = (event.getY(0) + event.getY(1))/2f;
 
-			mCoreLogic.setCameraOrientation(orientation);
+			float cameraPosition[] = mCoreLogic.getCameraPositionAsRef();
+			float mCameraOrientation[] = mCoreLogic.getCameraOrientationAsRef();
+			cameraPosition[0] -= Math.cos(mCameraOrientation[0]) * dx * 0.1f;
+			cameraPosition[2] += Math.sin(mCameraOrientation[0]) * dx * 0.1f;
+			cameraPosition[1] += dy * 0.1f;
+
 		}
 
+		final boolean isInProgres = mScaleGestureDetector.isInProgress();
+		mScaleGestureDetector.onTouchEvent(event);
 		return isInProgres || mScaleGestureDetector.isInProgress();
 	}
 	

@@ -1079,11 +1079,11 @@ public class CoreLogic {
 		}
 
 		if (keyState[KeyEvent.KEYCODE_W]) {
-			cameraPosition[1] += d*0.2f;
+			cameraPosition[1] += d*0.5f;
 		}
 
 		if (keyState[KeyEvent.KEYCODE_S]) {
-			cameraPosition[1] -= d*0.2f;
+			cameraPosition[1] -= d*0.5f;
 		}
 		
 	}
