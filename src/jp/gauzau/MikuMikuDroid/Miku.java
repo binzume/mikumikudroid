@@ -202,7 +202,7 @@ public class Miku {
 		if(rba != null) {
 			for(int i = 0; i < rba.size(); i++) {
 				RigidBody rb = rba.get(i);
-				Bone b = rb.bone_index == -1 ? mZeroBone : mModel.mBone.get(rb.bone_index);
+				Bone b = rb.bone_index == -1 ? (mModel.mBone.size() > 0 ? mModel.mBone.get(0) : mZeroBone) : mModel.mBone.get(rb.bone_index);
 				rb.btrb = btAddRigidBody(rb.type, rb.shape,
 						rb.size[0], rb.size[1], rb.size[2],
 						rb.location, rb.rotation, b.head_pos, b.matrix,
