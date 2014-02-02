@@ -4,7 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 
-import android.annotation.SuppressLint;
+import jp.gauzau.MikuMikuDroid.util.FullScreenCompatWrapper;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -114,6 +114,9 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			}
 		};
 		mCoreLogic.setScreenAngle(0);
+		if (mCoreLogic.getCameraMode() == CoreLogic.CAMERA_MODE_SENSOR2) {
+			cameraPos[2] = 0;
+		}
 		mCoreLogic.setCameraPosition(cameraPos);
 
 		mRelativeLayout = new RelativeLayout(this);
@@ -210,12 +213,9 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		
 		mScaleGestureDetector = new ScaleGestureDetector(this,
 				new ScaleGestureDetector.SimpleOnScaleGestureListener() {
-					private float x = 0, y = 0;
 					@Override
 					public boolean onScaleBegin(ScaleGestureDetector detector) {
 						Log.d("", "onScaleBegin : " + detector.getScaleFactor());
-						x = detector.getFocusX();
-						y = detector.getFocusY();
 						return super.onScaleBegin(detector);
 					}
 
@@ -227,14 +227,18 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 
 					@Override
 					public boolean onScale(ScaleGestureDetector detector) {
-						//scrollBy((int) (-(getScrollX() + detector.getFocusX()) * (1.0f - detector.getScaleFactor())),
-						//		(int) (-(getScrollY() + detector.getFocusY()) * (1.0f - detector.getScaleFactor())));
 						float d = detector.getCurrentSpan() - detector.getPreviousSpan();
 						float cameraPosition[] = mCoreLogic.getCameraPositionAsRef();
 						float mCameraOrientation[] = mCoreLogic.getCameraOrientationAsRef();
 						
-						cameraPosition[0] += Math.sin(mCameraOrientation[0]) * d * 0.1f;
-						cameraPosition[2] += Math.cos(mCameraOrientation[0]) * d * 0.1f;
+						if (mCoreLogic.getCameraMode() == CoreLogic.CAMERA_MODE_SENSOR2) {
+							if (d < 0 || mCoreLogic.cameraDistance > 0) {
+								mCoreLogic.cameraDistance -= d * 0.1f;
+							}
+						} else {
+							cameraPosition[0] += Math.sin(mCameraOrientation[0]) * d * 0.1f;
+							cameraPosition[2] += Math.cos(mCameraOrientation[0]) * d * 0.1f;
+						}
 						return true;
 					};
 				});
@@ -244,7 +248,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 	@Override
 	protected void onStart() {
 		super.onStart();
-		mRelativeLayout.setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | 0x00001000); // .SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+		FullScreenCompatWrapper.fullScreen(mRelativeLayout, true);
 	}
 
 	@Override
@@ -280,7 +284,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		menu.add(0, Menu.FIRST,     Menu.NONE, R.string.menu_load_model);
 		menu.add(0, Menu.FIRST + 1, Menu.NONE, R.string.menu_load_camera);
 		menu.add(0, Menu.FIRST + 2, Menu.NONE, R.string.menu_load_music);
-		menu.add(0, Menu.FIRST + 3, Menu.NONE, R.string.menu_play_pause);
+		menu.add(0, Menu.FIRST + 3, Menu.NONE, R.string.menu_toggle_oculus);
 		menu.add(0, Menu.FIRST + 4, Menu.NONE, R.string.menu_toggle_physics);
 		menu.add(0, Menu.FIRST + 5, Menu.NONE, R.string.menu_initialize);
 
@@ -299,7 +303,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 					final String model = sc0[which].getPath();
 					
 					// read as background if not .pmd
-					if(!model.endsWith(".pmd")) {
+					if(!model.endsWith(".pmd") && !model.endsWith(".pmx")) {
 						if(model.endsWith(".x")) { // accessory
 							AsyncExec<CoreLogic> ae = new AsyncExec<CoreLogic>(MikuMikuDroid.this) {
 								@Override
@@ -440,7 +444,8 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			break;
 			
 		case (Menu.FIRST + 3):
-			mCoreLogic.toggleStartStop();
+			// mCoreLogic.toggleStartStop();
+			mCoreLogic.enableOculusMode = !mCoreLogic.enableOculusMode;
 			break;
 			
 		case (Menu.FIRST + 4):
@@ -508,7 +513,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 				mPlayPauseButton.setBackgroundResource(R.drawable.ic_media_play);					
 			}
 			if (mPlayPauseButton.getVisibility() == View.VISIBLE) {
-				mRelativeLayout.setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | 0x00001000); // .SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+				FullScreenCompatWrapper.fullScreen(mRelativeLayout, true);
 			}
 			
 			mSeekBar.setVisibility(mSeekBar.getVisibility() == SeekBar.VISIBLE ? SeekBar.INVISIBLE : SeekBar.VISIBLE);
@@ -542,11 +547,16 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 				float dy = event.getY() - touchY;
 				touchX = event.getX();
 				touchY = event.getY();
-				yRotationBase -= -dx * 0.01f;
-				orientation[0] += -dx * 0.01f;
+				if (mCoreLogic.getCameraMode() == CoreLogic.CAMERA_MODE_SENSOR2) {
+					dx = -dx;
+					dy = -dy;
+				}
+
+				yRotationBase -= -dx * 0.005f;
+				orientation[0] += -dx * 0.005f;
 	
-				xRotationBase += dy * 0.01f;
-				orientation[2] -= dy * 0.01f;
+				xRotationBase += dy * 0.005f;
+				orientation[2] -= dy * 0.005f;
 	
 				mCoreLogic.setCameraOrientation(orientation);
 			}
@@ -698,7 +708,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		mCoreLogic.setCameraOrientation(orientation);
 	}
 	
-	float cameraPos[] = new float[]{0,17,-13};
+	float cameraPos[] = new float[]{0,17,-11};
 	
 
 	@Override
@@ -741,7 +751,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			break;
 		case KeyEvent.KEYCODE_BUTTON_A: // X
 		case KeyEvent.KEYCODE_SPACE:
-			mRelativeLayout.setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
+			FullScreenCompatWrapper.fullScreen(mRelativeLayout, true);
 			mSeekBar.setVisibility(View.INVISIBLE);
 			mPlayPauseButton.setVisibility(View.INVISIBLE);
 			mRewindButton.setVisibility(View.INVISIBLE);

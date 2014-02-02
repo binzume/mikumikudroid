@@ -380,12 +380,11 @@ public class MikuRendererGLES20 extends MikuRendererBase {
 	@SuppressLint("WrongCall")
 	@Override
 	public void onDrawFrame(GL10 gl) {
-		// mLightDir[0] = -0.5f; mLightDir[1] = -1.0f; mLightDir[2] = -0.5f;	// in left-handed region
-		mLightDir[0] = -0.5f; mLightDir[1] = 1.0f; mLightDir[2] = -0.5f;	// in left-handed region
+		mLightDir[0] = -0.5f; mLightDir[1] = -1.0f; mLightDir[2] = -0.5f;	// in left-handed region
 		Vector.normalize(mLightDir);
 		int pos = mCoreLogic.applyCurrentMotion();
-		String bg = mCoreLogic.getBG();
 		float diff = 0.4f;
+		boolean oculus = mCoreLogic.enableOculusMode;
 		
 		if (cameraPlane != null) {
 			cameraPlane.update();
@@ -417,169 +416,115 @@ public class MikuRendererGLES20 extends MikuRendererBase {
 			}
 		}
 
-		////////////////////////////////// LEFT
-		mRT.get("screenL").switchTargetFrameBuffer();
-		mCoreLogic.moveCameraX(-diff);
-
-		GLES20.glClearColor(0, 0, 1.0f, 1.0f);
-		GLES20.glClear(GL10.GL_COLOR_BUFFER_BIT | GL10.GL_DEPTH_BUFFER_BIT);
-		initializeAllTexture(false);
-//		initializeAllSkinningTexture();
-
-
-		////////////////////////////////////////////////////////////////////
-		//// draw models
-		if (mCoreLogic.getMiku() != null) {
-			for (Miku miku : mCoreLogic.getMiku()) {
-				if(miku.mModel.mIsTextureLoaded) {
-					for(RenderSet rs: miku.mRenderSenario) {
-//						mRT.get(rs.target).switchTargetFrameBuffer();
-						GLSL glsl = mGLSL.get(rs.shader);
-						
-						GLES20.glUseProgram(glsl.mProgram);
-
-						// Projection Matrix
-						GLES20.glUniformMatrix4fv(glsl.muPMatrix, 1, false, mCoreLogic.getProjectionMatrix(), 0);
-
-						// LightPosition
-						GLES20.glUniform3fv(glsl.muLightDir, 1, mLightDir, 0);
-
-						GLES20.glUniform1i(glsl.msToonSampler, 0);
-						GLES20.glUniform1i(glsl.msTextureSampler, 1);
-						GLES20.glUniform1i(glsl.msSphereSampler, 2);
-						
-						bindBuffer(miku.mModel, glsl);
-						if(!rs.shader.endsWith("alpha")) {
-							drawNonAlpha(miku.mModel, glsl);							
-							drawAlpha(miku.mModel, glsl, false);						
-						} else {
-							drawAlpha(miku.mModel, glsl, true);							
-						}
-					}
-				}
-			}
-		}
-
-		////////////////////////////////////////////////////////////////////
-		//// draw BG
-		if(bg != null) {
-			GLSL glsl = mGLSL.get("builtin:bg");
-			GLES20.glUseProgram(glsl.mProgram);
-			GLES20.glUniform1i(glsl.msTextureSampler, 1);
-
-			bindBgBuffer(glsl);
-			drawBg(bg);
-		}
-		
-		if ( cameraPlane != null && cameraPlane.cameraTextureName > 0 && mCoreLogic.cameraVisible) {
-			GLSL glsl = mGLSL.get("builtin:camera");
-			GLES20.glUseProgram(glsl.mProgram);
-			GLES20.glUniform1i(glsl.msTextureSampler, 1);
+		if (oculus) {
+			// Oculus Rift
+			
+			// L
+			mRT.get("screenL").switchTargetFrameBuffer();
+			mCoreLogic.moveCameraX(-diff);
+			draw();
+	
+			// R
+			mRT.get("screenR").switchTargetFrameBuffer();
+			mCoreLogic.moveCameraX(diff);
+			draw();
+			
+			mRT.get("screen").switchTargetFrameBuffer();
+			GLES20.glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+			GLES20.glClear(GL10.GL_COLOR_BUFFER_BIT | GL10.GL_DEPTH_BUFFER_BIT);
 			GLES20.glDisable(GLES20.GL_CULL_FACE);
-			GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-
-			cameraPlane.bindBuffer(glsl);
-
-			GLES20.glDrawElements(GLES20.GL_TRIANGLES, 6, GLES20.GL_UNSIGNED_SHORT, mBgIndex);
-		}
-
-
-		////////////////////////////////// RIGHT
-		mRT.get("screenR").switchTargetFrameBuffer();
-		mCoreLogic.moveCameraX(diff);
-
-		
-		GLES20.glClearColor(0, 0, 1.0f, 1.0f);
-		GLES20.glClear(GL10.GL_COLOR_BUFFER_BIT | GL10.GL_DEPTH_BUFFER_BIT);
-		initializeAllTexture(false);
-//		initializeAllSkinningTexture();
-
-
-		////////////////////////////////////////////////////////////////////
-		//// draw models
-		if (mCoreLogic.getMiku() != null) {
-			for (Miku miku : mCoreLogic.getMiku()) {
-				if(miku.mModel.mIsTextureLoaded) {
-					for(RenderSet rs: miku.mRenderSenario) {
-//						mRT.get(rs.target).switchTargetFrameBuffer();
-						//mRT.get("screenL").switchTargetFrameBuffer();
-						GLSL glsl = mGLSL.get(rs.shader);
-						
-						GLES20.glUseProgram(glsl.mProgram);
-
-						// Projection Matrix
-						GLES20.glUniformMatrix4fv(glsl.muPMatrix, 1, false, mCoreLogic.getProjectionMatrix(), 0);
-
-						// LightPosition
-						GLES20.glUniform3fv(glsl.muLightDir, 1, mLightDir, 0);
-
-						GLES20.glUniform1i(glsl.msToonSampler, 0);
-						GLES20.glUniform1i(glsl.msTextureSampler, 1);
-						GLES20.glUniform1i(glsl.msSphereSampler, 2);
-						
-						bindBuffer(miku.mModel, glsl);
-						if(!rs.shader.endsWith("alpha")) {
-							drawNonAlpha(miku.mModel, glsl);							
-							drawAlpha(miku.mModel, glsl, false);						
-						} else {
-							drawAlpha(miku.mModel, glsl, true);							
-						}
-					}
-				}
-			}
-		}
-
-		////////////////////////////////////////////////////////////////////
-		//// draw BG
-		if(bg != null) {
-			GLSL glsl = mGLSL.get("builtin:bg");
+			GLSL glsl = mGLSL.get("oculus");
 			GLES20.glUseProgram(glsl.mProgram);
-			GLES20.glUniform1i(glsl.msTextureSampler, 1);
-
 			bindBgBuffer(glsl);
-			drawBg(bg);
-		}
-		if ( cameraPlane != null && cameraPlane.cameraTextureName > 0 && mCoreLogic.cameraVisible) {
-			GLSL glsl = mGLSL.get("builtin:camera");
-			GLES20.glUseProgram(glsl.mProgram);
+			// L
 			GLES20.glUniform1i(glsl.msTextureSampler, 1);
-			GLES20.glDisable(GLES20.GL_CULL_FACE);
 			GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-
-			cameraPlane.bindBuffer(glsl);
-
+			//GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+			mRT.get("screenL").bindTexture();
+	
+			// R
+			GLES20.glUniform1i(glsl.msSphereSampler, 2);
+			GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
+			//GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
+			mRT.get("screenR").bindTexture();
+	
 			GLES20.glDrawElements(GLES20.GL_TRIANGLES, 6, GLES20.GL_UNSIGNED_SHORT, mBgIndex);
+		} else {
+			mRT.get("screen").switchTargetFrameBuffer();
+			draw();
 		}
-		
-		
-		// Oculus Rift
-		mRT.get("screen").switchTargetFrameBuffer();
-		GLES20.glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-		GLES20.glClear(GL10.GL_COLOR_BUFFER_BIT | GL10.GL_DEPTH_BUFFER_BIT);
-		GLES20.glDisable(GLES20.GL_CULL_FACE);
-		GLSL glsl = mGLSL.get("oculus");
-		GLES20.glUseProgram(glsl.mProgram);
-		bindBgBuffer(glsl);
-		// L
-		GLES20.glUniform1i(glsl.msTextureSampler, 1);
-		GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-		//GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
-		mRT.get("screenL").bindTexture();
-
-		// R
-		GLES20.glUniform1i(glsl.msSphereSampler, 2);
-		GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
-		//GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
-		mRT.get("screenR").bindTexture();
-		
-
-		GLES20.glDrawElements(GLES20.GL_TRIANGLES, 6, GLES20.GL_UNSIGNED_SHORT, mBgIndex);
 
 		
 //		GLES20.glFlush();
 //		checkGlError(TAG);
 		mCoreLogic.onDraw(pos);
 	//	Log.d("",""+(System.currentTimeMillis() -  start));
+	}
+	
+	private void draw() {
+		GLES20.glClearColor(0, 0, 1.0f, 1.0f);
+		GLES20.glClear(GL10.GL_COLOR_BUFFER_BIT | GL10.GL_DEPTH_BUFFER_BIT);
+		initializeAllTexture(false);
+//		initializeAllSkinningTexture();
+
+		String bg = mCoreLogic.getBG();
+
+		////////////////////////////////////////////////////////////////////
+		//// draw models
+		if (mCoreLogic.getMiku() != null) {
+			for (Miku miku : mCoreLogic.getMiku()) {
+				if(miku.mModel.mIsTextureLoaded) {
+					for(RenderSet rs: miku.mRenderSenario) {
+//						mRT.get(rs.target).switchTargetFrameBuffer();
+						GLSL glsl = mGLSL.get(rs.shader);
+						
+						GLES20.glUseProgram(glsl.mProgram);
+
+						// Projection Matrix
+						GLES20.glUniformMatrix4fv(glsl.muPMatrix, 1, false, mCoreLogic.getProjectionMatrix(), 0);
+
+						// LightPosition
+						GLES20.glUniform3fv(glsl.muLightDir, 1, mLightDir, 0);
+
+						GLES20.glUniform1i(glsl.msToonSampler, 0);
+						GLES20.glUniform1i(glsl.msTextureSampler, 1);
+						GLES20.glUniform1i(glsl.msSphereSampler, 2);
+						
+						bindBuffer(miku.mModel, glsl);
+						if(!rs.shader.endsWith("alpha")) {
+							drawNonAlpha(miku.mModel, glsl);							
+							drawAlpha(miku.mModel, glsl, false);						
+						} else {
+							drawAlpha(miku.mModel, glsl, true);							
+						}
+					}
+				}
+			}
+		}
+
+		////////////////////////////////////////////////////////////////////
+		//// draw BG
+		if(bg != null) {
+			GLSL glsl = mGLSL.get("builtin:bg");
+			GLES20.glUseProgram(glsl.mProgram);
+			GLES20.glUniform1i(glsl.msTextureSampler, 1);
+
+			bindBgBuffer(glsl);
+			drawBg(bg);
+		}
+		
+		if ( cameraPlane != null && cameraPlane.cameraTextureName > 0 && mCoreLogic.cameraVisible) {
+			GLSL glsl = mGLSL.get("builtin:camera");
+			GLES20.glUseProgram(glsl.mProgram);
+			GLES20.glUniform1i(glsl.msTextureSampler, 1);
+			GLES20.glDisable(GLES20.GL_CULL_FACE);
+			GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+
+			cameraPlane.bindBuffer(glsl);
+
+			GLES20.glDrawElements(GLES20.GL_TRIANGLES, 6, GLES20.GL_UNSIGNED_SHORT, mBgIndex);
+		}
+
 	}
 	
 	@Override

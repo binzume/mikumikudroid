@@ -13,8 +13,8 @@
 <string name="menu_rewind">Rewind</string>
 <string name="menu_initialize">Initialize</string>
 
-
-
-
 <string name="menu_toggle_physics">Physics ON/OFF</string>
+
+<string name="menu_toggle_oculus">Oculus ON/OFF</string>
+
 </resources>

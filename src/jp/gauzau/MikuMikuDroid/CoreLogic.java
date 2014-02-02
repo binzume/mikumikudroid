@@ -22,7 +22,6 @@ import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.util.Log;
 import android.view.KeyEvent;
-import android.view.View;
 
 public class CoreLogic {
 	// model / music data
@@ -42,7 +41,7 @@ public class CoreLogic {
 	private float[] mRMatrix = new float[16];
 	volatile private float[] mCameraOrientation = new float[3];
 	volatile private float[] cameraPosition = new float[3];
-	private float cameraDistance = 13f;
+	float cameraDistance = 13f;
 	private long jumpStartTime = 0;
 	private float jumpVelocity = 0;
 
@@ -65,7 +64,9 @@ public class CoreLogic {
 	public static final int CAMERA_MODE_SENSOR = 2;
 	public static final int CAMERA_MODE_SENSOR2 = 3;
 	public static final int CAMERA_MODE_MAX = 4;
-	private int cameraMode = CAMERA_MODE_SENSOR;
+	private int cameraMode = CAMERA_MODE_SENSOR2;
+	
+	public volatile boolean enableOculusMode = true;
 
 	public boolean keyState[] = new boolean[256];
 	public float analogInput[] = new float[16];
@@ -232,6 +233,7 @@ public class CoreLogic {
 			ObjectInputStream oi = new ObjectInputStream(new FileInputStream(vmc));
 			motion = (MikuMotion) oi.readObject();
 			motion.attachVMD(vmd);
+			oi.close();
 		} catch (Exception e) {
 			motion = new MikuMotion(vmd);
 		}
@@ -249,6 +251,7 @@ public class CoreLogic {
 			if (!f.exists()) {
 				ObjectOutputStream oi = new ObjectOutputStream(new FileOutputStream(vmc));
 				oi.writeObject(motion);
+				oi.close();
 			}
 		}
 	}
@@ -289,6 +292,7 @@ public class CoreLogic {
 					ObjectInputStream oi = new ObjectInputStream(new FileInputStream(vmc));
 					motion = (MikuMotion) oi.readObject();
 					motion.attachVMD(vmd);
+					oi.close();
 				} catch (Exception e) {
 					Log.d("loadModelMotion","fail");
 					motion = new MikuMotion(vmd);
@@ -563,6 +567,10 @@ public class CoreLogic {
 			cameraPosition[2] = -13;
 		}
 		
+	}
+
+	public int getCameraMode() {
+		return cameraMode;
 	}
 
 	public void toggleCameraView() {
@@ -978,6 +986,7 @@ public class CoreLogic {
 	@TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
 	protected void setCamera(float d, float dx, float[] pos, float[] rot, float angle, int width, int height) {
 		// Projection Matrix
+		float a = enableOculusMode ? 100f : 45f;
 		float s = (float) Math.sin(angle * Math.PI / 360);
 		Matrix.setIdentityM(mPMatrix, 0);
 		if (mAngle == 90) {
@@ -985,9 +994,9 @@ public class CoreLogic {
 		} else {
 			//Matrix.frustumM(mPMatrix, 0, -s * width / height, s * width / height, -s, s, 1f, 3500f);
 			if (Matrix.length(pos[0], pos[1], pos[2]) < 20) {
-				Matrix.perspectiveM(mPMatrix, 0, 100f, width * 1.0f / height,  0.5f, 300f);
+				Matrix.perspectiveM(mPMatrix, 0, a, width * 1.0f / height,  0.5f, 300f);
 			} else {
-				Matrix.perspectiveM(mPMatrix, 0, 100f, width * 1.0f / height,  4f, 2000f);				
+				Matrix.perspectiveM(mPMatrix, 0, a, width * 1.0f / height,  4f, 2000f);				
 			}
 		}
 		Matrix.scaleM(mPMatrix, 0, 1, 1, -1); // to right-handed
