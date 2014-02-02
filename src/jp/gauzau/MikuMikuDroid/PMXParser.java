@@ -9,6 +9,9 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.ShortBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map.Entry;
 
 import android.util.Log;
 
@@ -68,8 +71,8 @@ public class PMXParser extends ParserBase implements ModelFile {
 				parsePMDMaterialList(path);
 				parsePMDBoneList();
 		//		parsePMDIKList();
-		//		parsePMDFaceList();
-		//		parsePMDSkinDisp();
+				parsePMDFaceList();
+				parsePMDSkinDisp();
 		//		parsePMDBoneDispName();
 		//		parsePMDBoneDisp();
 				if (!isEof()) {
@@ -273,7 +276,7 @@ public class PMXParser extends ParserBase implements ModelFile {
 	}
 
 	private void parsePMDSkinDisp() {
-		byte num = getByte();
+		int num = getInt();
 		Log.d("PMDParser", "SkinDisp: " + String.valueOf(num));
 		if (num > 0) {
 			mSkinDisp = new ArrayList<Short>(num);
@@ -282,8 +285,23 @@ public class PMXParser extends ParserBase implements ModelFile {
 				return;
 			}
 			for (int i = 0; i < num; i++) {
-				short idx = getShort();
-				mSkinDisp.add(i, idx);
+				Log.d("PMDParser", "SkinDisp: " + readTexBuf(options[ATTR_STRING_ENCODING]));
+				readTexBuf(options[ATTR_STRING_ENCODING]);
+				getByte();
+				int count = getInt();
+				for (int j = 0 ; j < count; j++) {
+					if (getByte() == 0) {
+						mSkinDisp.add(i, readBoneIndex());
+					} else {
+						short idx;
+						if (options[ATTR_MORPH_INDEX_SZ] == 1) {
+							idx = getByte();
+						} else {
+							idx = getShort();
+						}
+						mSkinDisp.add(i, idx);
+					}
+				}
 			}
 		} else {
 			mSkinDisp = null;
@@ -291,29 +309,81 @@ public class PMXParser extends ParserBase implements ModelFile {
 	}
 
 	private void parsePMDFaceList() {
-		short num = getShort();
+		int num = getInt();
 		int acc = 0;
 		boolean isArm = CoreLogic.isArm();
 		Log.d("PMDParser", "Face: " + String.valueOf(num));
+		HashMap<Integer, Integer> vertset = new HashMap<Integer, Integer>();
 		if (num > 0) {
 			mFace = new ArrayList<Face>(num);
 			float[] buf = new float[3];
 			for (int i = 0; i < num; i++) {
 				Face face = new Face();
 
-				face.name = getString(20);
+				face.name = readTexBuf(options[ATTR_STRING_ENCODING]);
+				readTexBuf(options[ATTR_STRING_ENCODING]);// eng
+				face.face_type = getByte(); // control panel
+				int morphType = getByte();
 				face.face_vert_count = getInt();
-				face.face_type = getByte();
 
 				//				face.face_vert_data = new ArrayList<FaceVertData>(face.face_vert_count);
 				acc += face.face_vert_count;
 				if (isArm) { // for ARM native code
+					Log.d("PMDParser", "FACE: " + face.name + " t:" + face.face_type);
 					face.face_vert_index_native = ByteBuffer.allocateDirect(face.face_vert_count * 4).order(ByteOrder.nativeOrder()).asIntBuffer();
 					face.face_vert_offset_native = ByteBuffer.allocateDirect(face.face_vert_count * 4 * 3).order(ByteOrder.nativeOrder()).asFloatBuffer();
-					for (int j = 0; j < face.face_vert_count; j++) {
-						face.face_vert_index_native.put(face.face_type == 0 ? mInvMap[getInt()] : getInt());
-						getFloat(buf);
-						face.face_vert_offset_native.put(buf);
+					if (morphType != 8) {
+						for (int j = 0; j < face.face_vert_count; j++) {
+							int v = readVertIndex();
+							getFloat(buf);
+							if (morphType == 1) {
+								//buf[0] += mVertBuffer.get(v * 8);
+								//buf[1] += mVertBuffer.get(v * 8 + 1);
+								//buf[2] += mVertBuffer.get(v * 8 + 2);
+								if (vertset.containsKey(v)) {
+									v = vertset.get(v);
+								} else {
+									vertset.put(v, vertset.size());
+									v = vertset.size() - 1;
+								}
+							}
+							face.face_vert_index_native.put(v);
+							face.face_vert_offset_native.put(buf);
+							if (morphType == 0) {
+								getFloat();
+							}
+							if (morphType == 2) {
+								getFloat(buf); // skip rotation
+								getFloat();
+							}
+							if (morphType >= 3 && morphType <= 7) {
+								// UV
+								getFloat(); // skip w
+							}
+						}
+					} else {
+						// unimplemented
+						for (int j = 0; j < face.face_vert_count; j++) {
+							if (options[ATTR_MATERIAL_INDEX_SZ] == 1) {
+								getByte();
+							} else {
+								getShort();
+							}
+							face.face_vert_index_native.put(0);
+							getByte();
+							getFloat(buf);
+							face.face_vert_offset_native.put(buf);
+							getFloat(buf);
+							getFloat(buf);
+							getFloat(buf);
+							getFloat(buf);
+							getFloat(buf);
+							getFloat(buf);
+							getFloat(buf);
+							getFloat(buf);
+							getFloat();
+						}
+						face.face_vert_count = 0;
 					}
 					face.face_vert_index_native.position(0);
 					face.face_vert_offset_native.position(0);
@@ -332,9 +402,33 @@ public class PMXParser extends ParserBase implements ModelFile {
 						face.face_vert_cleared[j] = true;
 					}
 				}
-
+				
 				mFace.add(i, face);
 			}
+			
+			Face face = new Face();
+			face.name = "base";
+			face.face_type = 0;
+			face.face_vert_count = vertset.size();
+			if (isArm) { // for ARM native code
+				face.face_vert_index_native = ByteBuffer.allocateDirect(face.face_vert_count * 4).order(ByteOrder.nativeOrder()).asIntBuffer();
+				face.face_vert_offset_native = ByteBuffer.allocateDirect(face.face_vert_count * 4 * 3).order(ByteOrder.nativeOrder()).asFloatBuffer();
+				for (Entry<Integer, Integer> v : vertset.entrySet()) {
+					int idx = v.getKey();
+					face.face_vert_index_native.position(v.getValue());
+					face.face_vert_offset_native.position(v.getValue() * 3);
+					face.face_vert_index_native.put(idx);
+					
+					buf[0] = mVertBuffer.get(idx * 8);
+					buf[1] = mVertBuffer.get(idx * 8 + 1);
+					buf[2] = mVertBuffer.get(idx * 8 + 2);
+					face.face_vert_offset_native.put(buf);
+				}
+				face.face_vert_index_native.position(0);
+				face.face_vert_offset_native.position(0);
+			}
+			mFace.add(face);
+			Log.d("PMDParser", "FACE: " + face.name + " t:" + face.face_vert_count);
 			Log.d("PMDParser", String.format("Total Face Vert: %d", acc));
 		} else {
 			mFace = null;

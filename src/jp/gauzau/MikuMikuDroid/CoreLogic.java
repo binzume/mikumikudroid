@@ -383,7 +383,7 @@ public class CoreLogic {
 				Log.d("loadModelMotion","isPMX OK");
 				modelFile = pmx;
 			} else {
-				modelFile = pmx;
+				modelFile = null;
 			}
 		} else {
 			PMDParser pmd = new PMDParser(mBase, file);
