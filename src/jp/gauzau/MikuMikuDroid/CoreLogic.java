@@ -258,18 +258,32 @@ public class CoreLogic {
 
 	public synchronized boolean loadModelMotion(String modelf, String motionf) throws IOException, OutOfMemoryError {
 		// read model/motion files
-		PMDParser pmd = new PMDParser(mBase, modelf);
+		ModelFile modelFile = null;
+		if (modelf.endsWith(".pmx")) {
+			Log.d("loadModelMotion","PMXParser");
+			PMXParser pmx = new PMXParser(mBase, modelf);
+			if (pmx.isPmd()) {
+				Log.d("loadModelMotion","isPMX OK");
+				modelFile = pmx;
+			}
+			modelFile = pmx;
+		} else {
+			PMDParser pmd = new PMDParser(mBase, modelf);
+			if (pmd.isPmd()) {
+				modelFile = pmd;
+			}
+		}
 
 		Log.d("loadModelMotion","isPmd");
-		if (pmd.isPmd()) {
+		if (modelFile != null) {
 			// create texture cache
 			Log.d("loadModelMotion","pmd");
-			createTextureCache(pmd);
+			createTextureCache(modelFile);
 
 			// construct model/motion data structure
-			MikuModel model = new MikuModel(mBase, pmd, mMaxBone, true);
+			MikuModel model = new MikuModel(mBase, modelFile, mMaxBone, true);
 			MikuMotion motion = null;
-			pmd = null;
+			modelFile = null;
 
 			// delete previous cache
 			String vmc = motionf.replaceFirst(".vmd", "_mmcache.vmc");
@@ -361,10 +375,28 @@ public class CoreLogic {
 	}
 
 	public synchronized MikuModel loadStage(String file) throws IOException, OutOfMemoryError {
-		PMDParser pmd = new PMDParser(mBase, file);
-		if (pmd.isPmd()) {
-			createTextureCache(pmd);
-			MikuModel model = new MikuModel(mBase, pmd, mMaxBone, false);
+		ModelFile modelFile = null;
+		if (file.endsWith(".pmx")) {
+			Log.d("loadModelMotion","PMXParser");
+			PMXParser pmx = new PMXParser(mBase, file);
+			if (pmx.isPmd()) {
+				Log.d("loadModelMotion","isPMX OK");
+				modelFile = pmx;
+			} else {
+				modelFile = pmx;
+			}
+		} else {
+			PMDParser pmd = new PMDParser(mBase, file);
+			if (pmd.isPmd()) {
+				modelFile = pmd;
+			} else {
+				modelFile = null;
+			}
+		}
+
+		if (modelFile != null) {
+			createTextureCache(modelFile);
+			MikuModel model = new MikuModel(mBase, modelFile, mMaxBone, false);
 			Miku miku = new Miku(model);
 			miku.addRenderSenario("builtin:nomotion", "screen");
 			miku.addRenderSenario("builtin:nomotion_alpha", "screen");
@@ -793,7 +825,7 @@ public class CoreLogic {
 	public File[] getModelSelector() {
 		String[] ext = { ".bmp", ".jpg", ".png", ".tga" };
 
-		String[] extm = { ".pmd", ".x" };
+		String[] extm = { ".pmd", ".x", ".pmx" };
 
 		File[] model = listFiles(mBase + "UserFile/Model/", extm);
 		File[] bg = listFiles(mBase + "UserFile/BackGround/", ext);
