@@ -158,7 +158,6 @@ public class PMXParser extends ParserBase implements ModelFile {
 					rb.location[1] -= b.head_pos[1];
 					rb.location[2] -= b.head_pos[2];
 				}
-
 				mRigidBody.add(rb);
 			}
 		}
@@ -279,7 +278,6 @@ public class PMXParser extends ParserBase implements ModelFile {
 				//				face.face_vert_data = new ArrayList<FaceVertData>(face.face_vert_count);
 				acc += face.face_vert_count;
 				if (isArm) { // for ARM native code
-					Log.d("PMDParser", "FACE: " + face.name + " t:" + face.face_type);
 					face.face_vert_index_native = ByteBuffer.allocateDirect(face.face_vert_count * 4).order(ByteOrder.nativeOrder()).asIntBuffer();
 					face.face_vert_offset_native = ByteBuffer.allocateDirect(face.face_vert_count * 4 * 3).order(ByteOrder.nativeOrder()).asFloatBuffer();
 					if (morphType != 8) {
@@ -378,7 +376,6 @@ public class PMXParser extends ParserBase implements ModelFile {
 				face.face_vert_offset_native.position(0);
 			}
 			mFace.add(face);
-			Log.d("PMDParser", "FACE: " + face.name + " t:" + face.face_vert_count);
 			Log.d("PMDParser", String.format("Total Face Vert: %d", acc));
 		} else {
 			mFace = null;
@@ -404,7 +401,6 @@ public class PMXParser extends ParserBase implements ModelFile {
 					e.printStackTrace();
 				} // getStringBytes(new byte[20], 20);
 				readTexBuf(); // English name
-				Log.d("PMDParser", "BONE: " + bone.name);
 
 				bone.head_pos = new float[4];
 				bone.head_pos[0] = getFloat();
@@ -416,7 +412,6 @@ public class PMXParser extends ParserBase implements ModelFile {
 				getInt();
 
 				short flags = getShort();
-				Log.d("PMDParser", "BONE: flags:" + flags);
 				
 				if ((flags & 1) == 0) {
 					getFloat();
@@ -701,12 +696,6 @@ public class PMXParser extends ParserBase implements ModelFile {
 					short t = bone_num_0;
 					bone_num_0 = bone_num_1;
 					bone_num_1 = t;
-				}
-				if (bone_num_0 >= 155) {
-					bone_num_0 = 0;
-				}
-				if (bone_num_1 >= 155) {
-					bone_num_1 = 0;
 				}
 				mWeightBuffer.put(bone_num_0);
 				mWeightBuffer.put(bone_num_1);
