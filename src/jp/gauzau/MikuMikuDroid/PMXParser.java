@@ -10,7 +10,6 @@ import java.nio.IntBuffer;
 import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map.Entry;
 
 import android.util.Log;
@@ -70,17 +69,11 @@ public class PMXParser extends ParserBase implements ModelFile {
 				parsePMDIndexList();
 				parsePMDMaterialList(path);
 				parsePMDBoneList();
-		//		parsePMDIKList();
 				parsePMDFaceList();
 				parsePMDSkinDisp();
-		//		parsePMDBoneDispName();
-		//		parsePMDBoneDisp();
 				if (!isEof()) {
-			//		parsePMDEnglish();
-			//		parsePMDToonFileName(path, base);
-			//		parsePMDRigidBody();
-			//		parsePMDJoint();
-			//	} else {
+					parsePMDRigidBody();
+					parsePMDJoint();
 					mToonFileName = new ArrayList<String>(11);
 					mToonFileName.add(0, base + "Data/toon0.bmp");
 					for (int i = 0; i < 10; i++) {
@@ -103,9 +96,11 @@ public class PMXParser extends ParserBase implements ModelFile {
 			mJoint = new ArrayList<Joint>(num);
 			for (int i = 0; i < num; i++) {
 				Joint j = new Joint();
-				j.name = getString(20);
-				j.rigidbody_a = getInt();
-				j.rigidbody_b = getInt();
+				j.name = readTexBuf();
+				readTexBuf();
+				getByte(); // type (always zero)
+				j.rigidbody_a = readRigidIndex();
+				j.rigidbody_b = readRigidIndex();
 				j.position = new float[3];
 				j.rotation = new float[3];
 				j.const_position_1 = new float[3];
@@ -123,12 +118,11 @@ public class PMXParser extends ParserBase implements ModelFile {
 				getFloat(j.const_rotation_2);
 				getFloat(j.spring_position);
 				getFloat(j.spring_rotation);
-
 				mJoint.add(j);
 			}
 		}
 	}
-
+	
 	private void parsePMDRigidBody() {
 		int num = getInt();
 		Log.d("PMDParser", "RigidBody: " + String.valueOf(num));
@@ -137,8 +131,9 @@ public class PMXParser extends ParserBase implements ModelFile {
 			for (int i = 0; i < num; i++) {
 				RigidBody rb = new RigidBody();
 
-				rb.name = getString(20);
-				rb.bone_index = getShort();
+				rb.name = readTexBuf();
+				readTexBuf();
+				rb.bone_index = readBoneIndex();
 				rb.group_index = getByte();
 				rb.group_target = getShort();
 				rb.shape = getByte();
@@ -156,34 +151,19 @@ public class PMXParser extends ParserBase implements ModelFile {
 				rb.type = getByte();
 
 				rb.btrb = -1; // physics is not initialized yet
+				
+				if (rb.bone_index >= 0) {
+					Bone b = mBone.get(rb.bone_index);
+					rb.location[0] -= b.head_pos[0];
+					rb.location[1] -= b.head_pos[1];
+					rb.location[2] -= b.head_pos[2];
+				}
 
 				mRigidBody.add(rb);
 			}
 		}
 	}
 
-	private void parsePMDEnglish() throws IOException {
-		mHasEnglishName = getByte();
-		Log.d("PMDParser", "HasEnglishName: " + String.valueOf(mHasEnglishName));
-		if (mHasEnglishName == 1) {
-			parsePMDEnglishName();
-			parsePMDEnglishBoneList();
-			parsePMDEnglishSkinList();
-			parsePMDEnglishBoneDispName();
-		}
-
-	}
-
-	private void parsePMDEnglishBoneDispName() throws IOException {
-		int num = mBoneDispName.size();
-		if (num > 0) {
-			mEnglishBoneDispName = new ArrayList<String>(num);
-			for (int i = 0; i < num; i++) {
-				String str = getString(50);
-				mEnglishBoneDispName.add(i, str);
-			}
-		}
-	}
 
 	private void parsePMDToonFileName(String path, String base) throws IOException {
 		mToonFileName = new ArrayList<String>(11);
@@ -204,36 +184,6 @@ public class PMXParser extends ParserBase implements ModelFile {
 		}
 	}
 
-	private void parsePMDEnglishSkinList() throws IOException {
-		int num = mSkinDisp.size();
-		Log.d("PMDParser", "EnglishSkinName: " + String.valueOf(num));
-		if (num > 0) {
-			mEnglishSkinName = new ArrayList<String>(num);
-			for (int i = 0; i < num; i++) {
-				String str = getString(20);
-				mEnglishSkinName.add(i, str);
-			}
-		}
-	}
-
-	private void parsePMDEnglishBoneList() throws IOException {
-		int num = mBone.size();
-		Log.d("PMDParser", "EnglishBoneName: " + String.valueOf(num));
-		if (num > 0) {
-			mEnglishBoneName = new ArrayList<String>(num);
-			for (int i = 0; i < num; i++) {
-				String str = getString(20);
-				mEnglishBoneName.add(i, str);
-			}
-		}
-	}
-
-	private void parsePMDEnglishName() throws IOException {
-		mEnglishModelName = getString(20);
-		mEnglishComment = getString(256);
-		Log.d("PMDParser", "EnglishModelName: " + mEnglishModelName);
-		Log.d("PMDParser", "EnglishComment: " + mEnglishComment);
-	}
 
 	private void parsePMDBoneDisp() {
 		int mBoneDispNum = getInt();
@@ -285,8 +235,8 @@ public class PMXParser extends ParserBase implements ModelFile {
 				return;
 			}
 			for (int i = 0; i < num; i++) {
-				Log.d("PMDParser", "SkinDisp: " + readTexBuf(options[ATTR_STRING_ENCODING]));
-				readTexBuf(options[ATTR_STRING_ENCODING]);
+				Log.d("PMDParser", "SkinDisp: " + readTexBuf());
+				readTexBuf();
 				getByte();
 				int count = getInt();
 				for (int j = 0 ; j < count; j++) {
@@ -320,8 +270,8 @@ public class PMXParser extends ParserBase implements ModelFile {
 			for (int i = 0; i < num; i++) {
 				Face face = new Face();
 
-				face.name = readTexBuf(options[ATTR_STRING_ENCODING]);
-				readTexBuf(options[ATTR_STRING_ENCODING]);// eng
+				face.name = readTexBuf();
+				readTexBuf();// eng
 				face.face_type = getByte(); // control panel
 				int morphType = getByte();
 				face.face_vert_count = getInt();
@@ -436,32 +386,6 @@ public class PMXParser extends ParserBase implements ModelFile {
 		mInvMap = null;
 	}
 
-	private void parsePMDIKList() {
-		// the number of Vertexes
-		short num = getShort();
-		Log.d("PMDParser", "IK: " + String.valueOf(num));
-		if (num > 0) {
-			mIK = new ArrayList<IK>(num);
-			for (int i = 0; i < num; i++) {
-				IK ik = new IK();
-
-				ik.ik_bone_index = getShort();
-				ik.ik_target_bone_index = getShort();
-				ik.ik_chain_length = getByte();
-				ik.iterations = getShort();
-				ik.control_weight = getFloat();
-
-				ik.ik_child_bone_index = new Short[ik.ik_chain_length];
-				for (int j = 0; j < ik.ik_chain_length; j++) {
-					ik.ik_child_bone_index[j] = getShort();
-				}
-
-				mIK.add(i, ik);
-			}
-		} else {
-			mIK = null;
-		}
-	}
 
 	private void parsePMDBoneList() {
 		// the number of Vertexes
@@ -473,13 +397,13 @@ public class PMXParser extends ParserBase implements ModelFile {
 			for (int i = 0; i < num; i++) {
 				Bone bone = new Bone();
 
-				bone.name = readTexBuf(options[ATTR_STRING_ENCODING]);
+				bone.name = readTexBuf();
 				try {
 					bone.name_bytes = bone.name.getBytes("UTF-16LE");
 				} catch (UnsupportedEncodingException e) {
 					e.printStackTrace();
 				} // getStringBytes(new byte[20], 20);
-				readTexBuf(options[ATTR_STRING_ENCODING]); // English name
+				readTexBuf(); // English name
 				Log.d("PMDParser", "BONE: " + bone.name);
 
 				bone.head_pos = new float[4];
@@ -576,7 +500,7 @@ public class PMXParser extends ParserBase implements ModelFile {
 		Log.d("PMDParser", "TEXTURE: " + String.valueOf(texNum));
 		String[] texList = new String[texNum];
 		for (int i = 0; i< texNum; i++) {
-			texList[i] = readTexBuf(options[ATTR_STRING_ENCODING]);
+			texList[i] = readTexBuf();
 		}
 
 		// the number of Vertexes
@@ -587,8 +511,8 @@ public class PMXParser extends ParserBase implements ModelFile {
 			int acc = 0;
 			for (int i = 0; i < num; i++) {
 				Material material = new Material();
-				Log.d("PMDParser", "MATERIAL: name:" + readTexBuf(options[ATTR_STRING_ENCODING]));
-				readTexBuf(options[ATTR_STRING_ENCODING]); // engName
+				Log.d("PMDParser", "MATERIAL: name:" + readTexBuf());
+				readTexBuf(); // engName
 
 				material.diffuse_color = new float[4];
 				material.specular_color = new float[3];
@@ -628,7 +552,7 @@ public class PMXParser extends ParserBase implements ModelFile {
 				if (toonMode == 0) {
 					material.toon_index = 0;
 				}
-				readTexBuf((options[ATTR_STRING_ENCODING])); // memo
+				readTexBuf(); // memo
 				material.face_vert_count = getInt();
 				if (material.texture != null) {
 					material.texture = path + material.texture;
@@ -668,8 +592,6 @@ public class PMXParser extends ParserBase implements ModelFile {
 				mInvMap[i] = i; // dummy
 			}
 			mIndexBuffer = ByteBuffer.allocateDirect(num * 2).order(ByteOrder.nativeOrder()).asShortBuffer();
-			float[] data = new float[8];
-			int acc = 0;
 			for (int i = 0; i < num; i++) {
 				int vi = readVertIndex();
 				mIndexBuffer.put((short) vi);
@@ -688,6 +610,16 @@ public class PMXParser extends ParserBase implements ModelFile {
 		if (options[ATTR_BONE_INDEX_SZ] == 1) {
 			return getByte();
 		} else if (options[ATTR_BONE_INDEX_SZ] == 2) {
+				return getShort();
+		} else {
+			return (short)getInt(); // !!! max bones = 0xffff
+		}
+	}
+
+	private short readRigidIndex() {
+		if (options[ATTR_RIGIDBODY_INDEX_SZ] == 1) {
+			return getByte();
+		} else if (options[ATTR_RIGIDBODY_INDEX_SZ] == 2) {
 				return getShort();
 		} else {
 			return (short)getInt(); // !!! max bones = 0xffff
@@ -822,6 +754,9 @@ public class PMXParser extends ParserBase implements ModelFile {
 		return options;
 	}
 
+	private String readTexBuf() {
+		return readTexBuf(options[ATTR_STRING_ENCODING]);
+	}
 	private String readTexBuf(byte encode) {
 		int len = getInt();
 		if (len == 0) {
