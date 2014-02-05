@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 
 import jp.gauzau.MikuMikuDroid.util.FullScreenCompatWrapper;
+import jp.gauzau.MikuMikuDroid.util.OrientationEstimater;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -44,6 +45,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 	private Button mPlayPauseButton;
 	private Button mRewindButton;
 	private ScaleGestureDetector mScaleGestureDetector;
+	private OrientationEstimater orientationEstimater = new OrientationEstimater();
 	
 	// Model
 	private CoreLogic mCoreLogic;
@@ -52,8 +54,6 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 	SensorManager	mSM = null;
 	Sensor			mAx = null;
 	Sensor			mMg = null;
-	float[]			mAxV = new float[3];
-	float[]			mMgV = new float[3];
 
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
@@ -552,13 +552,10 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 					dy = -dy;
 				}
 
-				yRotationBase -= -dx * 0.005f;
-				orientation[0] += -dx * 0.005f;
+				orientationEstimater.rotateInDisplay(dx, dy);
+
 	
-				xRotationBase += dy * 0.005f;
-				orientation[2] -= dy * 0.005f;
-	
-				mCoreLogic.setCameraOrientation(orientation);
+				mCoreLogic.setCameraOrientation(orientationEstimater.getCurrentOrientation());
 			}
 		}
 		if (event.getAction() == MotionEvent.ACTION_MOVE && event.getPointerCount() == 2) {
@@ -603,47 +600,19 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		
 	}
 
-	private float[] inR = new float[16];
-	private float[] orientationCurrent = new float[3];
-	private float[] orientation = new float[]{0,0,-3.14159f/2}; // [yaw roll pitch] rad
-	private float yRotationBase = 8; // yaw
-	private float xRotationBase = 0; // pitch
 	private float[] gravHistory = new float[10]; // Gravity (G)
 	private int gravHistoryPos = 0;
-	private long lastGyroTime = 0;
+	float[]			mAxV = new float[3];
 	@Override
 	public void onSensorChanged(SensorEvent event) {
+		orientationEstimater.onSensorEvent(event);
 	
 		if(event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
 			System.arraycopy(event.values, 0, mAxV, 0, 3);
 			gravHistoryPos = (gravHistoryPos + 1) % gravHistory.length;
 			gravHistory[gravHistoryPos] = (float) Math.sqrt(mAxV[0] * mAxV[0] + mAxV[1]*mAxV[1] + mAxV[2]*mAxV[2]) / 9.8f;
-		} else if(event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
-			// values = [yaw pitch roll]
-			//Log.d("Sensor","TYPE_GYROSCOPE " + event.values[0] + "," + event.values[1] + "," + event.values[2]+ " ("+  event.timestamp);
-			if (lastGyroTime > 0 && yRotationBase < 7) {
-				float dt = (event.timestamp - lastGyroTime) * 0.000000001f * 1.1f;
-				// yaw rotation
-				orientation[0] -= -Math.sin(orientation[2]) * Math.cos(orientation[1]) * event.values[0] * dt; // virtual Y => Y
-				//orientation[2] += Math.sin(orientation[1]) * event.values[0] * d; // virtual Y => X
-				orientation[2] += (Math.sin(orientation[1]) * event.values[0] - Math.cos(orientation[2]) * Math.abs(event.values[0]))  * dt; // virtual Y => X
-				orientation[1] += -(Math.cos(orientation[2])) * event.values[0] * dt; // virtual Y => Z
-				// pitch rotation
-				orientation[2] += Math.cos(orientation[1]) * event.values[1] * dt; // virtual X
-				orientation[0] += Math.sin(orientation[1]) * event.values[1] * dt; // virtual X => Y
-				// roll rotation
-				orientation[1] += event.values[2] * dt; // virtual Z roll
-			}
-			lastGyroTime = event.timestamp;
-		} else if(event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
-			//Log.d("Sensor","TYPE_MAGNETIC_FIELD " + event.values[0] + "," + event.values[1] + "," + event.values[2]+ " ("+  event.timestamp);
-			if (event.accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE) {
-				//return;
-			}
-			System.arraycopy(event.values, 0, mMgV, 0, 3);			
 		}
 		
-		if (mAxV[0] == 0 || mMgV[0] == 0) return; // wait for initialize (FIXME!
 		if (gravHistory[gravHistoryPos] < 0.4) { // 0.3G
 			if (gravHistory[(gravHistoryPos + 5)%gravHistory.length] > 1.5) {
 				// jump!
@@ -653,59 +622,35 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			return;
 		}
 		
+		if (!orientationEstimater.isReady()) return;
 		
-		SensorManager.getRotationMatrix(inR, null, mAxV, mMgV);
-		SensorManager.getOrientation(inR, orientationCurrent);
-		if (yRotationBase > 7) {
-			yRotationBase = orientationCurrent[0];
-			orientation[0] = yRotationBase;
-		}
-		orientationCurrent[0] -= yRotationBase;
-		orientationCurrent[2] -= xRotationBase;
-		for (int i = 0; i < 3; i++) {
-			if (orientationCurrent[i] > orientation[i] + Math.PI) {
-				orientation[i] += Math.PI * 2;
-			}
-			if (orientationCurrent[i] < orientation[i] - Math.PI) {
-				orientation[i] -= Math.PI * 2;
-			}
-			
-			orientation[i] = (orientation[i]*199 + orientationCurrent[i]) / 200;
-		}
 		
 		if (Math.abs(mCoreLogic.analogInput[0]) > 0.1) {
-			yRotationBase -= mCoreLogic.analogInput[0] * 0.005f;
-			orientation[0] += mCoreLogic.analogInput[0] * 0.005f;
+			orientationEstimater.rotate(0, -mCoreLogic.analogInput[0] * 0.005f);
 		}
 		if (Math.abs(mCoreLogic.analogInput[4]) > 0.1) {
-			xRotationBase -= mCoreLogic.analogInput[4] * 0.005f;
-			orientation[2] += mCoreLogic.analogInput[4] * 0.005f;
+			orientationEstimater.rotate(-mCoreLogic.analogInput[4] * 0.005f, 0);
 		}
 		if (Math.abs(mCoreLogic.analogInput[5]) > 0.1) {
-			xRotationBase += mCoreLogic.analogInput[5] * 0.005f;
-			orientation[2] -= mCoreLogic.analogInput[5] * 0.005f;
+			orientationEstimater.rotate(mCoreLogic.analogInput[5] * 0.005f, 0);
 		}
 		
 		if (mCoreLogic.keyState[KeyEvent.KEYCODE_A] || mCoreLogic.keyState[KeyEvent.KEYCODE_PAGE_UP]) {
-			yRotationBase += 0.01f;
-			orientation[0] -= 0.01f;
+			orientationEstimater.rotate(0, 0.01f);
 		}
 		if (mCoreLogic.keyState[KeyEvent.KEYCODE_D] || mCoreLogic.keyState[KeyEvent.KEYCODE_PAGE_DOWN]) {
-			yRotationBase -= 0.01f;
-			orientation[0] += 0.01f;
+			orientationEstimater.rotate(0, -0.01f);
 		}
 		
 		if (mCoreLogic.keyState[KeyEvent.KEYCODE_F]) {
-			xRotationBase -= 0.01f;
-			orientation[2] += 0.01f;
+			orientationEstimater.rotate(-0.01f, 0);
 		}
 		if (mCoreLogic.keyState[KeyEvent.KEYCODE_R]) {
-			xRotationBase += 0.01f;
-			orientation[2] -= 0.01f;
+			orientationEstimater.rotate(0.01f, 0);
 		}
 		
 		//Log.d("Sensor","Orientation " + orientation[0] + "," + orientation[1] + "," + orientation[2]);
-		mCoreLogic.setCameraOrientation(orientation);
+		mCoreLogic.setCameraOrientation(orientationEstimater.getCurrentOrientation());
 	}
 	
 	float cameraPos[] = new float[]{0,17,-11};
@@ -731,11 +676,11 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			break;
 		case KeyEvent.KEYCODE_BUTTON_R1:
 		//case KeyEvent.KEYCODE_D:
-			yRotationBase -= 0.05f;
+			orientationEstimater.rotate(0, -0.05f);
 			break;
 		case KeyEvent.KEYCODE_BUTTON_L1:
 		//case KeyEvent.KEYCODE_A:
-			yRotationBase += 0.05f;
+			orientationEstimater.rotate(0, 0.05f);
 			break;
 		case KeyEvent.KEYCODE_V:
 		case KeyEvent.KEYCODE_BUTTON_Y: // ^
