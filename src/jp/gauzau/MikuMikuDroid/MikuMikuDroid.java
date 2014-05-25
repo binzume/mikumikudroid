@@ -555,7 +555,8 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 				orientationEstimater.rotateInDisplay(dx, dy);
 
 	
-				mCoreLogic.setCameraOrientation(orientationEstimater.getCurrentOrientation());
+				// mCoreLogic.setCameraOrientation(orientationEstimater.getCurrentOrientation());
+				mCoreLogic.setSensorRotationMatrix(orientationEstimater.getRotationMatrix());
 			}
 		}
 		if (event.getAction() == MotionEvent.ACTION_MOVE && event.getPointerCount() == 2) {
@@ -650,7 +651,8 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		}
 		
 		//Log.d("Sensor","Orientation " + orientation[0] + "," + orientation[1] + "," + orientation[2]);
-		mCoreLogic.setCameraOrientation(orientationEstimater.getCurrentOrientation());
+		// mCoreLogic.setCameraOrientation(orientationEstimater.getCurrentOrientation());
+		mCoreLogic.setSensorRotationMatrix(orientationEstimater.getRotationMatrix());
 	}
 	
 	float cameraPos[] = new float[]{0,17,-11};

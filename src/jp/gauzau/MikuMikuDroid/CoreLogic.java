@@ -44,7 +44,8 @@ public class CoreLogic {
 	float cameraDistance = 13f;
 	private long jumpStartTime = 0;
 	private float jumpVelocity = 0;
-
+	private float sensorRotationMatrix[] = null;
+	
 	// configurations
 	private String mBase;
 	private int mMaxBone = 0;
@@ -64,7 +65,7 @@ public class CoreLogic {
 	public static final int CAMERA_MODE_SENSOR = 2;
 	public static final int CAMERA_MODE_SENSOR2 = 3;
 	public static final int CAMERA_MODE_MAX = 4;
-	private int cameraMode = CAMERA_MODE_SENSOR2;
+	private int cameraMode = CAMERA_MODE_SENSOR;
 	
 	public volatile boolean enableOculusMode = true;
 
@@ -572,6 +573,10 @@ public class CoreLogic {
 		mCameraOrientation[2] = orientation[2];
 	}
 
+	public void setSensorRotationMatrix(float[] mat) {
+		sensorRotationMatrix = mat;
+	}
+
 	public float[] getCameraOrientationAsRef() {
 		return mCameraOrientation;
 	}
@@ -999,7 +1004,7 @@ public class CoreLogic {
 				mCameraIndex.location[0] = 0  + cameraPosition[0];
 				mCameraIndex.location[1] = dy * 50 + cameraPosition[1];
 				mCameraIndex.location[2] =  + cameraPosition[2];
-				mCameraIndex.rotation[0] = -mCameraOrientation[2] * 180 / 3.14159f - 90;
+				mCameraIndex.rotation[0] = -mCameraOrientation[2] * 180 / 3.14159f;
 				mCameraIndex.rotation[1] = -mCameraOrientation[0] * 180 / 3.14159f;
 				mCameraIndex.rotation[2] = -mCameraOrientation[1] * 180 / 3.14159f;
 				setCamera(-cameraDistance, dx, mCameraIndex.location, mCameraIndex.rotation, 120, mRenderWidth, mRenderHeight); // -38f
@@ -1007,7 +1012,7 @@ public class CoreLogic {
 				mCameraIndex.location[0] = 0 + cameraPosition[0];
 				mCameraIndex.location[1] = dy * 50 + cameraPosition[1];
 				mCameraIndex.location[2] = 0  + cameraPosition[2];
-				mCameraIndex.rotation[0] = -mCameraOrientation[2] * 180 / 3.14159f - 90;
+				mCameraIndex.rotation[0] = -mCameraOrientation[2] * 180 / 3.14159f;
 				mCameraIndex.rotation[1] = -mCameraOrientation[0] * 180 / 3.14159f;
 				mCameraIndex.rotation[2] = -mCameraOrientation[1] * 180 / 3.14159f;
 				setCamera(-10f, dx, mCameraIndex.location, mCameraIndex.rotation, 120, mRenderWidth, mRenderHeight);
@@ -1041,6 +1046,12 @@ public class CoreLogic {
 			Matrix.translateM(mPMatrix, 0, -dx, 0, 0.01f); // 
 		} else {
 			Matrix.translateM(mPMatrix, 0, -dx, 0, -d); // 
+		}
+		if (sensorRotationMatrix != null) {
+			// FIXME!
+			float result[] = new float[16];
+			Matrix.multiplyMM(result, 0, mPMatrix, 0, sensorRotationMatrix, 0);
+			mPMatrix = result;
 		}
 		Matrix.rotateM(mPMatrix, 0, rot[2], 0, 0, 1f);
 		Matrix.rotateM(mPMatrix, 0, rot[0], 1f, 0, 0);
