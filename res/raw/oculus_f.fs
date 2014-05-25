@@ -3,16 +3,16 @@
   uniform sampler2D sTex;
   uniform sampler2D sSphere;
   const vec2 offset = vec2(0.0, 0.0);
-  const float scaleR = 0.9;
-  const float dx = -0.032;
+  const float scaleR = 0.7;
+  const float dx = 0.018;
   const float texAspect = 1.0;
-  const float renderAspect = 9.0 / 6.0;
+  const float renderAspect = 16.0 / 9.0;
   
   vec2 calcTexCoord(vec2 texCoord) {
     vec2 scale_factor = vec2(scaleR,scaleR / renderAspect * 2.0);
 	vec2 d = ( texCoord - vec2(0.25,0.5) ) * vec2(2.0, texAspect);
     float dd = d.x * d.x + d.y*d.y;
-    vec2 t1 = d * (0.8 + 1.20 * dd + 2.00 * dd*dd);
+    vec2 t1 = d * (0.9 + 0.80 * dd + 1.00 * dd*dd);
     return t1 * scale_factor + vec2(0.5,0.5);
   }
   

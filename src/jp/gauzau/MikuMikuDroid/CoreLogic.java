@@ -64,12 +64,15 @@ public class CoreLogic {
 	public static final int CAMERA_MODE_SENSOR = 2;
 	public static final int CAMERA_MODE_SENSOR2 = 3;
 	public static final int CAMERA_MODE_MAX = 4;
-	private int cameraMode = CAMERA_MODE_SENSOR2;
+	private int cameraMode = CAMERA_MODE_SENSOR;
 	
 	public volatile boolean enableOculusMode = true;
 
 	public boolean keyState[] = new boolean[256];
 	public float analogInput[] = new float[16];
+	public float cameraPosOffset[] = new float[3];
+	
+	public float sensorRotationMat[] = null;
 
 	
 	// temporary data
@@ -995,22 +998,23 @@ public class CoreLogic {
 			if (dy < 0)
 				dy = 0;
 			//Log.d("", "dy:" + dy + "(" + jumpStartTime);
+			//Log.d("","offset: "+cameraPosOffset[1]);
 			if (mAngle == 0) {
 				mCameraIndex.location[0] = 0  + cameraPosition[0];
-				mCameraIndex.location[1] = dy * 50 + cameraPosition[1];
-				mCameraIndex.location[2] =  + cameraPosition[2];
-				mCameraIndex.rotation[0] = -mCameraOrientation[2] * 180 / 3.14159f - 90;
-				mCameraIndex.rotation[1] = -mCameraOrientation[0] * 180 / 3.14159f;
-				mCameraIndex.rotation[2] = -mCameraOrientation[1] * 180 / 3.14159f;
-				setCamera(-cameraDistance, dx, mCameraIndex.location, mCameraIndex.rotation, 120, mRenderWidth, mRenderHeight); // -38f
+				mCameraIndex.location[1] = dy * 50 + cameraPosition[1] + cameraPosOffset[1] * 0.013f; // x1.3
+				mCameraIndex.location[2] =  + cameraPosition[2] + cameraPosOffset[2] * 0.013f;
+				mCameraIndex.rotation[0] = -mCameraOrientation[0] * 180 / 3.14159f;
+				mCameraIndex.rotation[1] = -mCameraOrientation[1] * 180 / 3.14159f;
+				mCameraIndex.rotation[2] = -mCameraOrientation[2] * 180 / 3.14159f;
+				setCamera(-cameraDistance, dx, mCameraIndex.location, mCameraIndex.rotation, 80, mRenderWidth, mRenderHeight); // -38f
 			} else {
 				mCameraIndex.location[0] = 0 + cameraPosition[0];
-				mCameraIndex.location[1] = dy * 50 + cameraPosition[1];
-				mCameraIndex.location[2] = 0  + cameraPosition[2];
-				mCameraIndex.rotation[0] = -mCameraOrientation[2] * 180 / 3.14159f - 90;
-				mCameraIndex.rotation[1] = -mCameraOrientation[0] * 180 / 3.14159f;
-				mCameraIndex.rotation[2] = -mCameraOrientation[1] * 180 / 3.14159f;
-				setCamera(-10f, dx, mCameraIndex.location, mCameraIndex.rotation, 120, mRenderWidth, mRenderHeight);
+				mCameraIndex.location[1] = dy * 50 + cameraPosition[1] + cameraPosOffset[1] * 0.013f;
+				mCameraIndex.location[2] = 0  + cameraPosition[2] + cameraPosOffset[2] * 0.013f;
+				mCameraIndex.rotation[0] = -mCameraOrientation[0] * 180 / 3.14159f;
+				mCameraIndex.rotation[1] = -mCameraOrientation[1] * 180 / 3.14159f;
+				mCameraIndex.rotation[2] = -mCameraOrientation[2] * 180 / 3.14159f;
+				setCamera(-10f, dx, mCameraIndex.location, mCameraIndex.rotation, 80, mRenderWidth, mRenderHeight);
 			}
 		}
 	}
@@ -1018,7 +1022,7 @@ public class CoreLogic {
 	@TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
 	protected void setCamera(float d, float dx, float[] pos, float[] rot, float angle, int width, int height) {
 		// Projection Matrix
-		float a = enableOculusMode ? 100f : 45f;
+		float a = enableOculusMode ? 80f : 45f;  // Nexus7 = 100deg
 		float s = (float) Math.sin(angle * Math.PI / 360);
 		Matrix.setIdentityM(mPMatrix, 0);
 		if (mAngle == 90) {
@@ -1041,6 +1045,11 @@ public class CoreLogic {
 			Matrix.translateM(mPMatrix, 0, -dx, 0, 0.01f); // 
 		} else {
 			Matrix.translateM(mPMatrix, 0, -dx, 0, -d); // 
+		}
+		if (sensorRotationMat != null) {
+			float result[] = new float[16];
+			Matrix.multiplyMM(result, 0, mPMatrix, 0, sensorRotationMat, 0);
+			mPMatrix = result;
 		}
 		Matrix.rotateM(mPMatrix, 0, rot[2], 0, 0, 1f);
 		Matrix.rotateM(mPMatrix, 0, rot[0], 1f, 0, 0);

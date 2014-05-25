@@ -555,7 +555,8 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 				orientationEstimater.rotateInDisplay(dx, dy);
 
 	
-				mCoreLogic.setCameraOrientation(orientationEstimater.getCurrentOrientation());
+				//mCoreLogic.setCameraOrientation(orientationEstimater.getCurrentOrientation());
+				mCoreLogic.sensorRotationMat = orientationEstimater.getRotationMatrix();
 			}
 		}
 		if (event.getAction() == MotionEvent.ACTION_MOVE && event.getPointerCount() == 2) {
@@ -611,13 +612,16 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			System.arraycopy(event.values, 0, mAxV, 0, 3);
 			gravHistoryPos = (gravHistoryPos + 1) % gravHistory.length;
 			gravHistory[gravHistoryPos] = (float) Math.sqrt(mAxV[0] * mAxV[0] + mAxV[1]*mAxV[1] + mAxV[2]*mAxV[2]) / 9.8f;
+			mCoreLogic.cameraPosOffset[0] = orientationEstimater.getPosition()[0];
+			mCoreLogic.cameraPosOffset[1] = orientationEstimater.getPosition()[1];
+			mCoreLogic.cameraPosOffset[2] = orientationEstimater.getPosition()[2];
 		}
 		
 		if (gravHistory[gravHistoryPos] < 0.4) { // 0.3G
 			if (gravHistory[(gravHistoryPos + 5)%gravHistory.length] > 1.5) {
 				// jump!
-				Log.d("","JUMP!");
-				mCoreLogic.cameraJump();
+			//	Log.d("","JUMP!");
+			//	mCoreLogic.cameraJump();
 			}
 			return;
 		}
@@ -650,10 +654,11 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		}
 		
 		//Log.d("Sensor","Orientation " + orientation[0] + "," + orientation[1] + "," + orientation[2]);
-		mCoreLogic.setCameraOrientation(orientationEstimater.getCurrentOrientation());
+		//mCoreLogic.setCameraOrientation(orientationEstimater.getCurrentOrientation());
+		mCoreLogic.sensorRotationMat = orientationEstimater.getRotationMatrix();
 	}
 	
-	float cameraPos[] = new float[]{0,17,-11};
+	float cameraPos[] = new float[]{0,17,-8};
 	
 
 	@Override

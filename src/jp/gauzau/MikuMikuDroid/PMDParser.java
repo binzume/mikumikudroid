@@ -116,6 +116,10 @@ public class PMDParser extends ParserBase implements ModelFile {
 		}
 	}
 
+	private void Log3f(String s, float[] a) {
+		Log.d("", s + ":" + a[0] +"," +a[1] +"," + a[2]);
+	}
+
 	private void parsePMDRigidBody() {
 		int num = getInt();
 		Log.d("PMDParser", "RigidBody: " + String.valueOf(num));
@@ -143,7 +147,12 @@ public class PMDParser extends ParserBase implements ModelFile {
 				rb.type			= getByte();
 				
 				rb.btrb			= -1;	// physics is not initialized yet
-				
+
+				Log.d("Rigid", "" + rb.name + " " + rb.bone_index  + " " + rb.group_index + "ty:" + rb.type);
+				Log3f("size", rb.size);
+				Log3f("location", rb.location);
+				Log3f("rotation", rb.rotation);
+
 				mRigidBody.add(rb);
 			}			
 		}
