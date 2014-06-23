@@ -16,6 +16,8 @@ public class OrientationEstimater {
 	public final float[] rotationMatrix_t1 = new float[16];
 	public float[] rotationMatrix_t2 = new float[16];
 
+	public float[] rotationMatrix_d = new float[16];
+	
 	private boolean landscape = true; // swapXY
 
 	private float[] acc = new float[3];
@@ -32,11 +34,10 @@ public class OrientationEstimater {
 	private final Vector3f posVec = new Vector3f();
 	private final Vector3f gyroVec = new Vector3f();
 
+	private float[] outputPosition = new float[3];
 	private float[] orientation = new float[3]; // [yaw roll pitch] (rad)
 	private float[] orientationCurrent = new float[3];
 	private float[] position = new float[3]; // beta
-	private float yRotationBase = 0; // yaw (deg)
-	private float xRotationBase = 0; // pitch (deg)
 
 	private final float[] accHistory = new float[8];
 	private int accHistoryCount = 0;
@@ -52,11 +53,10 @@ public class OrientationEstimater {
 	public void reset() {
 		Log.d("OrientationEstimater", "reset");
 		Matrix.setIdentityM(rotationMatrix, 0);
+		Matrix.setIdentityM(rotationMatrix_d, 0);
 		position[0] = 0;
 		position[1] = 0;
 		position[2] = 0;
-		xRotationBase = 0;
-		yRotationBase = 0;
 	}
 
 	/**
@@ -79,10 +79,7 @@ public class OrientationEstimater {
 	 * @return
 	 */
 	public float[] getRotationMatrix() {
-		System.arraycopy(rotationMatrix, 0, rotationMatrix_t1, 0, 16);
-		Matrix.rotateM(rotationMatrix_t1, 0, xRotationBase, 1, 0, 0);
-		Matrix.rotateM(rotationMatrix_t1, 0, yRotationBase, 0, 1, 0);
-		System.arraycopy(rotationMatrix_t1, 0, outputRotationMatrix, 0, 16);
+		Matrix.multiplyMM(outputRotationMatrix, 0, rotationMatrix_d, 0, rotationMatrix, 0);
 		return outputRotationMatrix;
 	}
 
@@ -92,22 +89,43 @@ public class OrientationEstimater {
 	 * @return float array [x,y,z] unit:mm
 	 */
 	public float[] getPosition() {
-		// return position;
-		return posVec.values;
+		//outputPosition[0] = posVec.values[0] + position[0];
+		//outputPosition[1] = posVec.values[1] + position[1];
+		//outputPosition[2] = posVec.values[2] + position[2];
+		return position;
 	}
 	
 
 	public void rotateInDisplay(float dx, float dy) {
-		float scale = 0.1f;
-		SensorManager.getOrientation(rotationMatrix, orientationCurrent);
-
-		yRotationBase += dx * scale; // (dx * Math.cos(orientationCurrent[2]) + dy * Math.sin(orientationCurrent[2])) * scale;
-		xRotationBase += -dy * scale; // (dy * Math.cos(orientationCurrent[2]) - dx * Math.sin(orientationCurrent[2])) * scale;
+		
+		float l = (float)Math.sqrt(dx *dx + dy * dy) * 0.004f;
+		if (l > 0.001f) {
+			Matrix.setRotateM(rotationMatrix_t1, 0, l * 180 / PI, dy, dx, 0);
+			Matrix.multiplyMM(rotationMatrix_t2, 0, rotationMatrix_t1, 0, rotationMatrix_d, 0);
+			
+			// swap(d,t2)
+			float tm[] = rotationMatrix_t2;
+			rotationMatrix_t2 = rotationMatrix_d;
+			rotationMatrix_d = tm;
+		}
+	}
+	
+	public void translateInDisplay(float[] pos, float dx, float dy, float dz) {
+		
+		float l = (float)Math.sqrt(dx *dx + dy * dy + dz * dz) * 0.1f;
+		if (l > 0.01f) {
+			float [] a = new float[]{-dx * 0.1f, dy * 0.1f, dz * 0.1f, 1};
+			float [] b = new float[4];
+			Matrix.multiplyMV(b, 0, outputRotationMatrix, 0, a, 0);
+			pos[0] += b[0];
+			pos[1] += b[1];
+			pos[2] -= b[2];
+		}
 	}
 
 	public void rotate(float x, float y) {
-		xRotationBase += x;
-		yRotationBase += y;
+		Matrix.rotateM(rotationMatrix_d, 0, x, 1, 0, 0);
+		Matrix.rotateM(rotationMatrix_d, 0, y, 0, 1, 0);
 	}
 
 	public boolean isReady() {
@@ -223,7 +241,7 @@ public class OrientationEstimater {
 			// event.values : [x,y,z] -> [yaw pitch roll]  landscape mode
 			//Log.d("Sensor","TYPE_GYROSCOPE " + event.values[0] + "," + event.values[1] + "," + event.values[2]+ " ("+  event.timestamp);
 			if (Math.abs(event.values[0]) > 3.0f) {
-				position[1] *= 0.95f;
+				posVec.values[1] *= 0.95f;
 			}
 			if (lastGyroTime > 0) {
 				float dt = (event.timestamp - lastGyroTime) * 0.000000001f;

@@ -228,16 +228,14 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 					@Override
 					public boolean onScale(ScaleGestureDetector detector) {
 						float d = detector.getCurrentSpan() - detector.getPreviousSpan();
-						float cameraPosition[] = mCoreLogic.getCameraPositionAsRef();
-						float mCameraOrientation[] = mCoreLogic.getCameraOrientationAsRef();
 						
 						if (mCoreLogic.getCameraMode() == CoreLogic.CAMERA_MODE_SENSOR2) {
 							if (d < 0 || mCoreLogic.cameraDistance > 0) {
 								mCoreLogic.cameraDistance -= d * 0.1f;
 							}
 						} else {
-							cameraPosition[0] += Math.sin(mCameraOrientation[0]) * d * 0.1f;
-							cameraPosition[2] += Math.cos(mCameraOrientation[0]) * d * 0.1f;
+							float cameraPosition[] = mCoreLogic.getCameraPositionAsRef();
+							orientationEstimater.translateInDisplay(cameraPosition, 0,0, -d);
 						}
 						return true;
 					};
@@ -553,12 +551,11 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 				}
 
 				orientationEstimater.rotateInDisplay(dx, dy);
-
-	
 				// mCoreLogic.setCameraOrientation(orientationEstimater.getCurrentOrientation());
 				mCoreLogic.setSensorRotationMatrix(orientationEstimater.getRotationMatrix());
 			}
 		}
+
 		if (event.getAction() == MotionEvent.ACTION_MOVE && event.getPointerCount() == 2) {
 			float dy = (event.getY(0) + event.getY(1))/2f - touchY;
 			float dx = (event.getX(0) + event.getX(1))/2f - touchX;
@@ -566,12 +563,9 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			touchX = (event.getX(0) + event.getX(1))/2f;
 			touchY = (event.getY(0) + event.getY(1))/2f;
 
-			float cameraPosition[] = mCoreLogic.getCameraPositionAsRef();
-			float mCameraOrientation[] = mCoreLogic.getCameraOrientationAsRef();
-			cameraPosition[0] -= Math.cos(mCameraOrientation[0]) * dx * 0.1f;
-			cameraPosition[2] += Math.sin(mCameraOrientation[0]) * dx * 0.1f;
-			cameraPosition[1] += dy * 0.1f;
 
+			float cameraPosition[] = mCoreLogic.getCameraPositionAsRef();
+			orientationEstimater.translateInDisplay(cameraPosition, dx,dy, 0);
 		}
 
 		final boolean isInProgres = mScaleGestureDetector.isInProgress();
