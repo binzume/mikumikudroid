@@ -8,7 +8,7 @@ import android.util.Log;
 
 public class OrientationEstimater {
 
-	private final static float G = SensorManager.GRAVITY_EARTH;
+	private final static float G = SensorManager.GRAVITY_EARTH * 1.023f;
 	private final static float PI = (float) Math.PI;
 
 	private final float[] outputRotationMatrix = new float[16];
@@ -17,7 +17,7 @@ public class OrientationEstimater {
 	public float[] rotationMatrix_t2 = new float[16];
 
 	public float[] rotationMatrix_d = new float[16];
-	
+
 	private boolean landscape = true; // swapXY
 
 	private float[] acc = new float[3];
@@ -25,6 +25,7 @@ public class OrientationEstimater {
 	private long lastGyroTime = 0;
 	private long lastAccelTime = 0;
 	private long lastMagneTime = 0;
+	private long resetTime = 0;
 
 	private final float[] groundI = new float[] { 0, 1, 0, 1 };
 	private final Vector3f groundVec = new Vector3f();
@@ -34,7 +35,7 @@ public class OrientationEstimater {
 	private final Vector3f posVec = new Vector3f();
 	private final Vector3f gyroVec = new Vector3f();
 
-	private float[] outputPosition = new float[3];
+	//private float[] outputPosition = new float[3];
 	private float[] orientation = new float[3]; // [yaw roll pitch] (rad)
 	private float[] orientationCurrent = new float[3];
 	private float[] position = new float[3]; // beta
@@ -44,19 +45,19 @@ public class OrientationEstimater {
 
 	private int eventCount = 0;
 
-	
-
 	public OrientationEstimater() {
 		reset();
 	}
 
 	public void reset() {
 		Log.d("OrientationEstimater", "reset");
+		resetTime = System.currentTimeMillis();
 		Matrix.setIdentityM(rotationMatrix, 0);
 		Matrix.setIdentityM(rotationMatrix_d, 0);
 		position[0] = 0;
 		position[1] = 0;
 		position[2] = 0;
+		posVec.set(0, 0, 0);
 	}
 
 	/**
@@ -76,10 +77,11 @@ public class OrientationEstimater {
 
 	/**
 	 * Current rotation matrix.
+	 * 
 	 * @return
 	 */
 	public float[] getRotationMatrix() {
-		Matrix.multiplyMM(outputRotationMatrix, 0, rotationMatrix_d, 0, rotationMatrix, 0);
+		Matrix.multiplyMM(outputRotationMatrix, 0, rotationMatrix, 0, rotationMatrix_d, 0);
 		return outputRotationMatrix;
 	}
 
@@ -94,28 +96,32 @@ public class OrientationEstimater {
 		//outputPosition[2] = posVec.values[2] + position[2];
 		return position;
 	}
-	
 
 	public void rotateInDisplay(float dx, float dy) {
-		
-		float l = (float)Math.sqrt(dx *dx + dy * dy) * 0.004f;
+
+		float l = (float) Math.sqrt(dx * dx + dy * dy) * 0.004f;
 		if (l > 0.001f) {
-			Matrix.setRotateM(rotationMatrix_t1, 0, l * 180 / PI, dy, dx, 0);
-			Matrix.multiplyMM(rotationMatrix_t2, 0, rotationMatrix_t1, 0, rotationMatrix_d, 0);
-			
+			//  OutRot = a * Rot * D = Rot * b * D
+			//  b * D = Rot^-1 * a * OutRot
+			Matrix.invertM(rotationMatrix_t1, 0, rotationMatrix, 0);
+			Matrix.rotateM(rotationMatrix_t1, 0, l * 180 / PI, dy, dx, 0);
+			Matrix.multiplyMM(rotationMatrix_t2, 0, rotationMatrix_t1, 0, outputRotationMatrix, 0);
+
 			// swap(d,t2)
 			float tm[] = rotationMatrix_t2;
 			rotationMatrix_t2 = rotationMatrix_d;
 			rotationMatrix_d = tm;
 		}
 	}
-	
+
 	public void translateInDisplay(float[] pos, float dx, float dy, float dz) {
-		
-		float l = (float)Math.sqrt(dx *dx + dy * dy + dz * dz) * 0.1f;
+		float scale = 0.1f;
+
+		float l = (float) Math.sqrt(dx * dx + dy * dy + dz * dz) * 0.1f;
 		if (l > 0.01f) {
-			float [] a = new float[]{-dx * 0.1f, dy * 0.1f, dz * 0.1f, 1};
-			float [] b = new float[4];
+			// FIXME
+			float[] a = new float[] { -dx * scale, dy * scale, dz * scale, 1 };
+			float[] b = new float[4];
 			Matrix.multiplyMV(b, 0, outputRotationMatrix, 0, a, 0);
 			pos[0] += b[0];
 			pos[1] += b[1];
@@ -165,8 +171,8 @@ public class OrientationEstimater {
 
 				// ...
 				vVec.scale(0.99f);
-				if (vVec.length() < 50 || posVec.length() > 1000) {
-					// vVec.scale(0.95f);
+				if (vVec.length() < 20 || vVec.length() > 1000) {
+					vVec.scale(0.95f);
 				}
 
 				accHistory[(accHistoryCount++) % accHistory.length] = accVec.length();
@@ -270,14 +276,15 @@ public class OrientationEstimater {
 			float theta = (float) Math.acos(groundVec.dot(accVec));
 			if (theta > 0) {
 				float[] cross = groundVec.cross(accVec).normalize().array();
-				Matrix.setRotateM(rotationMatrix_t1, 0, theta * 180 / PI * 0.001f, cross[0], cross[1], cross[2]);
+				float factor = (System.currentTimeMillis() - resetTime < 300) ? 0.8f : 0.001f;
+				Matrix.setRotateM(rotationMatrix_t1, 0, theta * 180 / PI * factor, cross[0], cross[1], cross[2]);
 				Matrix.multiplyMM(rotationMatrix_t2, 0, rotationMatrix_t1, 0, rotationMatrix, 0);
 				float tm[] = rotationMatrix_t2;
 				rotationMatrix_t2 = rotationMatrix;
 				rotationMatrix = tm;
 			}
 		}
-		
+
 	}
 
 }

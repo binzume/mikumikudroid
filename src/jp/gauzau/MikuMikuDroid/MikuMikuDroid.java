@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 
 import jp.gauzau.MikuMikuDroid.util.FullScreenCompatWrapper;
+import jp.gauzau.MikuMikuDroid.util.MotionDetector;
 import jp.gauzau.MikuMikuDroid.util.OrientationEstimater;
 import android.annotation.TargetApi;
 import android.app.Activity;
@@ -30,11 +31,14 @@ import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
+import android.widget.CompoundButton;
+import android.widget.CompoundButton.OnCheckedChangeListener;
 import android.widget.RelativeLayout;
 import android.widget.RelativeLayout.LayoutParams;
 import android.widget.SeekBar;
 import android.widget.SeekBar.OnSeekBarChangeListener;
 import android.widget.Toast;
+import android.widget.ToggleButton;
 
 @TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
 public class MikuMikuDroid extends Activity implements SensorEventListener {
@@ -46,6 +50,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 	private Button mRewindButton;
 	private ScaleGestureDetector mScaleGestureDetector;
 	private OrientationEstimater orientationEstimater = new OrientationEstimater();
+	private MotionDetector motionDetector = new MotionDetector();
 	
 	// Model
 	private CoreLogic mCoreLogic;
@@ -119,12 +124,44 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		}
 		mCoreLogic.setCameraPosition(cameraPos);
 
-		mRelativeLayout = new RelativeLayout(this);
-		mRelativeLayout.setVerticalGravity(Gravity.BOTTOM);
+		setContentView(R.layout.main);
+		mRelativeLayout = (RelativeLayout)findViewById(R.id.content);
+		
+		findViewById(R.id.reset).setOnClickListener(new OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				orientationEstimater.reset();
+			}
+		});
+
+		findViewById(R.id.openMenu).setOnClickListener(new OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				openOptionsMenu();
+			}
+		});
+
+		findViewById(R.id.viewMode).setOnClickListener(new OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				mCoreLogic.toggleViewMode();
+			}
+		});
+
+		((ToggleButton)findViewById(R.id.oculusToggle)).setOnCheckedChangeListener(new OnCheckedChangeListener() {
+			@Override
+			public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+				mCoreLogic.enableOculusMode = isChecked;
+			}
+		});
+
+
+		//mRelativeLayout = new RelativeLayout(this);
+		//mRelativeLayout.setVerticalGravity(Gravity.BOTTOM);
 		mMMGLSurfaceView = new MMGLSurfaceView(this, mCoreLogic);
 
 	
-		LayoutParams p = new LayoutParams(LayoutParams.FILL_PARENT, LayoutParams.WRAP_CONTENT);
+		LayoutParams p = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
 		p.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
 		mSeekBar = new SeekBar(this);
 		mSeekBar.setLayoutParams(p);
@@ -198,7 +235,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		mRelativeLayout.addView(mSeekBar);
 		mRelativeLayout.addView(mPlayPauseButton);
 		mRelativeLayout.addView(mRewindButton);
-		setContentView(mRelativeLayout);
+		// setContentView(mRelativeLayout);
 
 		if (mCoreLogic.checkFileIsPrepared() == false) {
 			/*
@@ -282,7 +319,6 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		menu.add(0, Menu.FIRST,     Menu.NONE, R.string.menu_load_model);
 		menu.add(0, Menu.FIRST + 1, Menu.NONE, R.string.menu_load_camera);
 		menu.add(0, Menu.FIRST + 2, Menu.NONE, R.string.menu_load_music);
-		menu.add(0, Menu.FIRST + 3, Menu.NONE, R.string.menu_toggle_oculus);
 		menu.add(0, Menu.FIRST + 4, Menu.NONE, R.string.menu_toggle_physics);
 		menu.add(0, Menu.FIRST + 5, Menu.NONE, R.string.menu_initialize);
 
@@ -441,11 +477,6 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			});
 			break;
 			
-		case (Menu.FIRST + 3):
-			// mCoreLogic.toggleStartStop();
-			mCoreLogic.enableOculusMode = !mCoreLogic.enableOculusMode;
-			break;
-			
 		case (Menu.FIRST + 4):
 			mCoreLogic.togglePhysics();
 			break;
@@ -514,9 +545,13 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 				FullScreenCompatWrapper.fullScreen(mRelativeLayout, true);
 			}
 			
-			mSeekBar.setVisibility(mSeekBar.getVisibility() == SeekBar.VISIBLE ? SeekBar.INVISIBLE : SeekBar.VISIBLE);
-			mPlayPauseButton.setVisibility(mPlayPauseButton.getVisibility() == Button.VISIBLE ? Button.INVISIBLE : Button.VISIBLE);
-			mRewindButton.setVisibility(mRewindButton.getVisibility() == Button.VISIBLE ? Button.INVISIBLE : Button.VISIBLE);
+			int visibility = mPlayPauseButton.getVisibility() == View.VISIBLE ? View.INVISIBLE : View.VISIBLE;
+			
+			findViewById(R.id.top_menu).setVisibility(visibility);
+			
+			mSeekBar.setVisibility(visibility);
+			mPlayPauseButton.setVisibility(visibility);
+			mRewindButton.setVisibility(visibility);
 			mRelativeLayout.requestLayout();
 
 		}
@@ -595,26 +630,15 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		
 	}
 
-	private float[] gravHistory = new float[10]; // Gravity (G)
-	private int gravHistoryPos = 0;
-	float[]			mAxV = new float[3];
 	@Override
 	public void onSensorChanged(SensorEvent event) {
 		orientationEstimater.onSensorEvent(event);
-	
-		if(event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-			System.arraycopy(event.values, 0, mAxV, 0, 3);
-			gravHistoryPos = (gravHistoryPos + 1) % gravHistory.length;
-			gravHistory[gravHistoryPos] = (float) Math.sqrt(mAxV[0] * mAxV[0] + mAxV[1]*mAxV[1] + mAxV[2]*mAxV[2]) / 9.8f;
-		}
 		
-		if (gravHistory[gravHistoryPos] < 0.4) { // 0.3G
-			if (gravHistory[(gravHistoryPos + 5)%gravHistory.length] > 1.5) {
-				// jump!
-				Log.d("","JUMP!");
-				mCoreLogic.cameraJump();
-			}
-			return;
+		motionDetector.onSensorEvent(event);
+	
+		if (motionDetector.jump) {
+			Log.d("","JUMP!");
+			mCoreLogic.cameraJump();
 		}
 		
 		if (!orientationEstimater.isReady()) return;
