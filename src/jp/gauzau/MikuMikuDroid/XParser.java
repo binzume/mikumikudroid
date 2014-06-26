@@ -32,7 +32,7 @@ public class XParser extends ParserBase {
 	private float[] mD0 = new float[3];
 	private float[] mD1 = new float[3];
 
-	public XParser(String base, String file, float scale) throws IOException {
+	public XParser(String base, String file, float scale, String cacheBase) throws IOException {
 		super(file);
 		mFileName = file;
 		mIsX = false;
@@ -42,7 +42,7 @@ public class XParser extends ParserBase {
 		try {
 			parseXHeader();
 			if(mIsX) {
-				parseXMesh(base, path, scale);
+				parseXMesh(cacheBase, path, scale);
 				createBuffers(base, mFileName);
 
 			}
@@ -122,7 +122,7 @@ public class XParser extends ParserBase {
 		createVertBuffer(mMb);
 		createIndexBuffer(mMb);
 		
-		setDummyBone("ÉZÉìÉ^Å[");
+		setDummyBone("ÔøΩZÔøΩÔøΩÔøΩ^ÔøΩ[");
 		
 		mToonFileName = new ArrayList<String>(11);
 		mToonFileName.add(0, base + "Data/toon0.bmp");

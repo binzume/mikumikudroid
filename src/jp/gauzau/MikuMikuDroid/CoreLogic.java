@@ -5,11 +5,14 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.io.StringWriter;
 import java.util.ArrayList;
+
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -48,6 +51,7 @@ public class CoreLogic {
 	
 	// configurations
 	private String mBase;
+	private String mInternalDataDir;
 	private int mMaxBone = 0;
 	private Context mCtx;
 	private int mScreenWidth;
@@ -191,12 +195,50 @@ public class CoreLogic {
 		if (isArm()) {
 			btMakeWorld();
 		}
+		
 
 		if (new File("/sdcard/.MikuMikuDroid").exists()) {
 			mBase = "/sdcard/.MikuMikuDroid/";
 		} else {
 			mBase = "/sdcard/MikuMikuDroid/";
 		}
+
+		
+		File f = new File(ctx.getFilesDir(), "/Data/toon0.bmp");
+		Log.d("MikuMikuDroid", f.getAbsolutePath() + ":" + f.isFile());
+		if (!f.isFile()) {
+			String srcDir = "toon";
+			String dstDir = ctx.getFilesDir().getAbsolutePath() + "/Data";
+			try {
+				String files[] = ctx.getAssets().list(srcDir);
+				new File(dstDir).mkdirs();
+				for (String file : files) {
+					InputStream is = null;
+					OutputStream os = null;
+					try {
+						is = ctx.getAssets().open(srcDir + "/" + file);
+						os = new FileOutputStream(dstDir + "/" + file);
+						byte[] buf = new byte[1024];
+						int length;
+						while ((length = is.read(buf)) > 0) {
+							os.write(buf, 0, length);
+						}
+					} finally {
+						if (is != null)
+							is.close();
+						if (os != null)
+							os.close();
+					}
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+
+		}
+		Log.d("MikuMikuDroid", f.getAbsolutePath() + ":" + f.isFile());
+		
+		mInternalDataDir = ctx.getFilesDir().getAbsolutePath() + "/";
+		
 	}
 
 	public void setGLConfig(int max_bone) {
@@ -213,7 +255,7 @@ public class CoreLogic {
 	// Model configurations
 	public void loadModel(String modelf) throws IOException {
 		// model
-		PMDParser pmd = new PMDParser(mBase, modelf);
+		PMDParser pmd = new PMDParser(mInternalDataDir, modelf);
 		MikuModel model = new MikuModel(mBase, pmd, mMaxBone, false);
 
 		// Create Miku
@@ -262,14 +304,14 @@ public class CoreLogic {
 		ModelFile modelFile = null;
 		if (modelf.endsWith(".pmx")) {
 			Log.d("loadModelMotion","PMXParser");
-			PMXParser pmx = new PMXParser(mBase, modelf);
+			PMXParser pmx = new PMXParser(mInternalDataDir, modelf);
 			if (pmx.isPmd()) {
 				Log.d("loadModelMotion","isPMX OK");
 				modelFile = pmx;
 			}
 			modelFile = pmx;
 		} else {
-			PMDParser pmd = new PMDParser(mBase, modelf);
+			PMDParser pmd = new PMDParser(mInternalDataDir, modelf);
 			if (pmd.isPmd()) {
 				modelFile = pmd;
 			}
@@ -357,7 +399,7 @@ public class CoreLogic {
 		ModelBuilder mb = new ModelBuilder(modelf);
 
 		if (!c.hasCache() || !mb.readFromFile(xc)) {
-			XParser x = new XParser(mBase, modelf, 10.0f);
+			XParser x = new XParser(mInternalDataDir, modelf, 10.0f, mBase);
 			if (x.isX()) {
 				x.getModelBuilder().writeToFile(xc);
 			}
@@ -379,7 +421,7 @@ public class CoreLogic {
 		ModelFile modelFile = null;
 		if (file.endsWith(".pmx")) {
 			Log.d("loadModelMotion","PMXParser");
-			PMXParser pmx = new PMXParser(mBase, file);
+			PMXParser pmx = new PMXParser(mInternalDataDir, file);
 			if (pmx.isPmd()) {
 				Log.d("loadModelMotion","isPMX OK");
 				modelFile = pmx;
@@ -387,7 +429,7 @@ public class CoreLogic {
 				modelFile = null;
 			}
 		} else {
-			PMDParser pmd = new PMDParser(mBase, file);
+			PMDParser pmd = new PMDParser(mInternalDataDir, file);
 			if (pmd.isPmd()) {
 				modelFile = pmd;
 			} else {
@@ -825,7 +867,7 @@ public class CoreLogic {
 	}
 
 	public boolean checkFileIsPrepared() {
-		File files = new File(mBase + "Data/toon0.bmp");
+		File files = new File(mInternalDataDir + "Data/toon0.bmp");
 		return files.exists();
 	}
 
@@ -834,33 +876,33 @@ public class CoreLogic {
 
 		String[] extm = { ".pmd", ".x", ".pmx" };
 
-		File[] model = listFiles(mBase + "UserFile/Model/", extm);
+		File[] model = listFiles(mBase + "", extm); // UserFile/Model/
 		File[] bg = listFiles(mBase + "UserFile/BackGround/", ext);
-		File[] acc = listFiles(mBase + "UserFile/Accessory/", ".x");
-		File[] f = new File[model.length + bg.length + acc.length];
+		//File[] acc = listFiles(mBase + "UserFile/Accessory/", ".x");
+		File[] f = new File[model.length + bg.length]; //   + acc.length
 		for (int i = 0; i < model.length; i++) {
 			f[i] = model[i];
 		}
 		for (int i = 0; i < bg.length; i++) {
 			f[i + model.length] = bg[i];
 		}
-		for (int i = 0; i < acc.length; i++) {
-			f[i + model.length + bg.length] = acc[i];
-		}
+		//for (int i = 0; i < acc.length; i++) {
+		//	f[i + model.length + bg.length] = acc[i];
+		//}
 		return f;
 	}
 
 	public File[] getMotionSelector() {
-		return listFiles(mBase + "UserFile/Motion/", ".vmd");
+		return listFiles(mBase + "", ".vmd"); // UserFile/Motion/
 	}
 
 	public File[] getCameraSelector() {
-		return listFiles(mBase + "UserFile/Motion/", ".vmd");
+		return listFiles(mBase + "", ".vmd"); // UserFile/Motion/
 	}
 
 	public File[] getMediaSelector() {
 		String[] ext = { ".mp3", ".wav", ".3gp", ".mp4", ".m4a", ".ogg" };
-		return listFiles(mBase + "UserFile/Wave/", ext);
+		return listFiles(mBase + "", ext); // UserFile/Wave/
 	}
 
 	public File[] listFiles(String dir, String ext) {
