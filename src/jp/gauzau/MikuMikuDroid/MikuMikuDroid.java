@@ -131,6 +131,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			@Override
 			public void onClick(View v) {
 				orientationEstimater.reset();
+				mCoreLogic.setCameraPosition(cameraPos);
 			}
 		});
 
@@ -147,6 +148,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 				mCoreLogic.toggleViewMode();
 			}
 		});
+		
 
 		((ToggleButton)findViewById(R.id.oculusToggle)).setOnCheckedChangeListener(new OnCheckedChangeListener() {
 			@Override
@@ -155,6 +157,8 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			}
 		});
 
+		// Oculus enable
+		mCoreLogic.enableOculusMode = ((ToggleButton)findViewById(R.id.oculusToggle)).isChecked();
 
 		//mRelativeLayout = new RelativeLayout(this);
 		//mRelativeLayout.setVerticalGravity(Gravity.BOTTOM);

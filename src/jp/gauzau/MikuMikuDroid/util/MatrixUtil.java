@@ -13,5 +13,11 @@ public class MatrixUtil {
 		}
 		return s + "|";
 	}
+	
+	public static void multiplyVM(float[] ret, float lhsVec[], float rhsMat[]) {
+		for (int i = 0; i< 4 ; i++) {
+			ret[i] = lhsVec[0] * rhsMat[i] +  lhsVec[1] * rhsMat[i + 4] +  lhsVec[2] * rhsMat[i + 8] +  lhsVec[3] * rhsMat[i + 12];
+		}
+	}
 
 }

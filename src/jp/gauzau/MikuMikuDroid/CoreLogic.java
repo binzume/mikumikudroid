@@ -67,7 +67,7 @@ public class CoreLogic {
 	public static final int CAMERA_MODE_MAX = 4;
 	private int cameraMode = CAMERA_MODE_SENSOR;
 	
-	public volatile boolean enableOculusMode = true;
+	public volatile boolean enableOculusMode = false;
 
 	public boolean keyState[] = new boolean[256];
 	public float analogInput[] = new float[16];
@@ -598,10 +598,12 @@ public class CoreLogic {
 			cameraPosition[0] = 0;
 			cameraPosition[1] = 18;
 			cameraPosition[2] = 0;
+			cameraDistance = 13f;
 		} else {
 			cameraPosition[0] = 0;
 			cameraPosition[1] = 18;
 			cameraPosition[2] = -13;
+			cameraDistance = 0f;
 		}
 		
 	}
@@ -1001,17 +1003,17 @@ public class CoreLogic {
 				dy = 0;
 			//Log.d("", "dy:" + dy + "(" + jumpStartTime);
 			if (mAngle == 0) {
-				mCameraIndex.location[0] = 0  + cameraPosition[0];
-				mCameraIndex.location[1] = dy * 50 + cameraPosition[1];
-				mCameraIndex.location[2] =  + cameraPosition[2];
+				mCameraIndex.location[0] = cameraPosition[0];
+				mCameraIndex.location[1] = cameraPosition[1] + dy * 50;
+				mCameraIndex.location[2] = cameraPosition[2];
 				mCameraIndex.rotation[0] = -mCameraOrientation[2] * 180 / 3.14159f;
 				mCameraIndex.rotation[1] = -mCameraOrientation[0] * 180 / 3.14159f;
 				mCameraIndex.rotation[2] = -mCameraOrientation[1] * 180 / 3.14159f;
 				setCamera(-cameraDistance, dx, mCameraIndex.location, mCameraIndex.rotation, 120, mRenderWidth, mRenderHeight); // -38f
 			} else {
-				mCameraIndex.location[0] = 0 + cameraPosition[0];
-				mCameraIndex.location[1] = dy * 50 + cameraPosition[1];
-				mCameraIndex.location[2] = 0  + cameraPosition[2];
+				mCameraIndex.location[0] = cameraPosition[0];
+				mCameraIndex.location[1] = cameraPosition[1] + dy * 50;
+				mCameraIndex.location[2] = cameraPosition[2];
 				mCameraIndex.rotation[0] = -mCameraOrientation[2] * 180 / 3.14159f;
 				mCameraIndex.rotation[1] = -mCameraOrientation[0] * 180 / 3.14159f;
 				mCameraIndex.rotation[2] = -mCameraOrientation[1] * 180 / 3.14159f;

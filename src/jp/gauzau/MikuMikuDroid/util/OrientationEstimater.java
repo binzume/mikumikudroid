@@ -54,6 +54,7 @@ public class OrientationEstimater {
 		resetTime = System.currentTimeMillis();
 		Matrix.setIdentityM(rotationMatrix, 0);
 		Matrix.setIdentityM(rotationMatrix_d, 0);
+		Matrix.setIdentityM(outputRotationMatrix, 0);
 		position[0] = 0;
 		position[1] = 0;
 		position[2] = 0;
@@ -99,7 +100,7 @@ public class OrientationEstimater {
 
 	public void rotateInDisplay(float dx, float dy) {
 
-		float l = (float) Math.sqrt(dx * dx + dy * dy) * 0.004f;
+		float l = (float) Math.sqrt(dx * dx + dy * dy) * 0.002f;
 		if (l > 0.001f) {
 			//  OutRot = a * Rot * D = Rot * b * D
 			//  b * D = Rot^-1 * a * OutRot
@@ -117,15 +118,16 @@ public class OrientationEstimater {
 	public void translateInDisplay(float[] pos, float dx, float dy, float dz) {
 		float scale = 0.1f;
 
-		float l = (float) Math.sqrt(dx * dx + dy * dy + dz * dz) * 0.1f;
-		if (l > 0.01f) {
-			// FIXME
-			float[] a = new float[] { -dx * scale, dy * scale, dz * scale, 1 };
+		float l = (float) Math.sqrt(dx * dx + dy * dy + dz * dz) * scale;
+		if (l > 0.001f) {
+			float[] a = new float[] { -dx * scale, dy * scale, -dz * scale, 1 };
 			float[] b = new float[4];
-			Matrix.multiplyMV(b, 0, outputRotationMatrix, 0, a, 0);
+			Matrix.invertM(rotationMatrix_t1, 0, outputRotationMatrix, 0);
+			Matrix.multiplyMV(b, 0, rotationMatrix_t1, 0, a, 0);
+
 			pos[0] += b[0];
 			pos[1] += b[1];
-			pos[2] -= b[2];
+			pos[2] += b[2];
 		}
 	}
 
