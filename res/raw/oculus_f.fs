@@ -11,7 +11,7 @@
   const float dx = -0.032;
   const float renderAspect = 9.0 / 7.0; //nexus7=9/7
 // Nexus5
-//  const float scaleR = 0.85; // nexus7=0.90
+//  const float scaleR = 0.80; // nexus7=0.90
 //  const float dx = 0.018; // nexus7= -0.032
 //  const float renderAspect = 9.0 / 8.0; //nexus7=9/7
   

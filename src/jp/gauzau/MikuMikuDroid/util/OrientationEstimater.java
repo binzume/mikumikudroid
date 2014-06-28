@@ -272,7 +272,7 @@ public class OrientationEstimater {
 			return; // wait for initialize
 
 		// probably stopping. adjust ground vector.
-		if (gyroVec.length() < 0.2f && Math.abs(accVecN.length() - G) < 0.5f) {
+		if (gyroVec.length() < 0.3f && Math.abs(accVecN.length() - G) < 0.5f) {
 			// estimated ground vec.
 			Matrix.multiplyMV(groundVec.array(), 0, rotationMatrix, 0, groundI, 0); // rotMatrix * groundA
 			float theta = (float) Math.acos(groundVec.dot(accVec));

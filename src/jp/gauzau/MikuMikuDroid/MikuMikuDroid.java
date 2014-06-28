@@ -507,8 +507,8 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			String[] is = new String[item.length];
 			for(int i = 0; i < item.length; i++) {
 				is[i] = item[i].getName();
-				int idx = is[i].lastIndexOf(".");
-				is[i] = is[i].substring(0, idx);
+				//int idx = is[i].lastIndexOf(".");
+				//is[i] = is[i].substring(0, idx);
 			}
 			ad.setItems(is, task);
 		}
