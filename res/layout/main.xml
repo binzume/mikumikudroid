@@ -14,8 +14,7 @@
         android:id="@+id/top_menu"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentTop="true"
+        android:layout_gravity="center_vertical"
         android:visibility="invisible"
         android:orientation="horizontal" >
 

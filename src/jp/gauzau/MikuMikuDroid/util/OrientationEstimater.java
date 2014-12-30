@@ -8,7 +8,7 @@ import android.util.Log;
 
 public class OrientationEstimater {
 
-	private final static float G = SensorManager.GRAVITY_EARTH * 1.023f;
+	private final static float G = SensorManager.GRAVITY_EARTH;
 	private final static float PI = (float) Math.PI;
 
 	private final float[] outputRotationMatrix = new float[16];
@@ -19,15 +19,16 @@ public class OrientationEstimater {
 	public float[] rotationMatrix_d = new float[16];
 
 	private boolean landscape = true; // swapXY
+	private boolean zeroSnap = true;
+	private float zeroSnapThreshold = 500f;
 
-	private float[] acc = new float[3];
 	private float[] mag = new float[3];
 	private long lastGyroTime = 0;
 	private long lastAccelTime = 0;
 	private long lastMagneTime = 0;
 	private long resetTime = 0;
 
-	private final float[] groundI = new float[] { 0, 1, 0, 1 };
+	private final Vector3f groundI = new Vector3f(0, 1, 0);
 	private final Vector3f groundVec = new Vector3f();
 	private final Vector3f accVec = new Vector3f();
 	private final Vector3f accVecN = new Vector3f();
@@ -35,10 +36,9 @@ public class OrientationEstimater {
 	private final Vector3f posVec = new Vector3f();
 	private final Vector3f gyroVec = new Vector3f();
 
-	//private float[] outputPosition = new float[3];
+	private float[] position = new float[3];
+	private float[] outputPosition = new float[3];
 	private float[] orientation = new float[3]; // [yaw roll pitch] (rad)
-	private float[] orientationCurrent = new float[3];
-	private float[] position = new float[3]; // beta
 
 	private final float[] accHistory = new float[8];
 	private int accHistoryCount = 0;
@@ -59,6 +59,7 @@ public class OrientationEstimater {
 		position[1] = 0;
 		position[2] = 0;
 		posVec.set(0, 0, 0);
+		vVec.set(0, 0, 0);
 	}
 
 	/**
@@ -68,11 +69,7 @@ public class OrientationEstimater {
 	 * @return float array [x,y,z]
 	 */
 	public float[] getCurrentOrientation() {
-		SensorManager.getOrientation(rotationMatrix, orientationCurrent);
-		// swap x,y
-		orientation[0] = -orientationCurrent[1];
-		orientation[1] = orientationCurrent[0];
-		orientation[2] = -orientationCurrent[2];
+		SensorManager.getOrientation(rotationMatrix, orientation);
 		return orientation;
 	}
 
@@ -92,10 +89,10 @@ public class OrientationEstimater {
 	 * @return float array [x,y,z] unit:mm
 	 */
 	public float[] getPosition() {
-		//outputPosition[0] = posVec.values[0] + position[0];
-		//outputPosition[1] = posVec.values[1] + position[1];
-		//outputPosition[2] = posVec.values[2] + position[2];
-		return position;
+		outputPosition[0] = position[0] + posVec.values[0];
+		outputPosition[1] = position[1] + posVec.values[1];
+		outputPosition[2] = position[2] + posVec.values[2];
+		return outputPosition;
 	}
 
 	public void rotateInDisplay(float dx, float dy) {
@@ -143,92 +140,92 @@ public class OrientationEstimater {
 	public void onSensorEvent(SensorEvent event) {
 
 		if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-			System.arraycopy(event.values, 0, acc, 0, 3);
-
 			if (landscape) {
-				accVecN.set(-acc[1], acc[0], -acc[2]);
+				accVecN.set(-event.values[1], event.values[0], -event.values[2]);
 			} else {
-				accVecN.set(-acc[0], -acc[1], -acc[2]);
+				accVecN.set(-event.values[0], -event.values[1], -event.values[2]);
 			}
 
 			float dt = (event.timestamp - lastAccelTime) * 0.000000001f; // dt(sec)
-			Matrix.multiplyMV(groundVec.values, 0, rotationMatrix, 0, groundI, 0); // rotMatrix * groundA
 			if (lastAccelTime > 0 && dt < 0.5f) {
-				accVec.set(accVecN.values);
-
 				// m/s^2
-				accVec.values[0] -= groundVec.values[0] * G;
-				accVec.values[1] -= groundVec.values[1] * G;
-				accVec.values[2] -= groundVec.values[2] * G;
+				Matrix.invertM(rotationMatrix_t1, 0, rotationMatrix, 0);
+				Matrix.multiplyMV(accVec.values, 0, rotationMatrix_t1, 0, accVecN.values, 0);
+				accVec.values[1] -= G;
 
-				// mm/s
+				// velocity(mm/s)
 				vVec.values[0] += accVec.values[0] * dt * 1000;
 				vVec.values[1] += accVec.values[1] * dt * 1000;
 				vVec.values[2] += accVec.values[2] * dt * 1000;
 
-				// mm
-				posVec.values[0] += vVec.values[0] * dt;
-				posVec.values[1] += vVec.values[1] * dt;
-				posVec.values[2] += vVec.values[2] * dt;
-
-				// ...
-				vVec.scale(0.99f);
-				if (vVec.length() < 20 || vVec.length() > 1000) {
+				// velocity limit
+				if (vVec.length() > 5000) {
 					vVec.scale(0.95f);
 				}
 
+				boolean resting = false;
 				accHistory[(accHistoryCount++) % accHistory.length] = accVec.length();
 				if (accHistoryCount > accHistory.length) {
-					float sum = 0;
-					for (int i = 0; i < accHistory.length; i++) {
-						sum += accHistory[i];
+					final float l = accVec.length();
+					float min = l, max = l, sum = 0;
+					for (float a : accHistory) {
+						sum += a;
+						if (a > max)
+							max = a;
+						if (a < min)
+							min = a;
 					}
-					if (sum < 1.0f && vVec.length() > 10f && accVec.length() < 0.5f) {
-						vVec.scale(0.8f);
-						//posVec.scale(0.995f);
-					}
-					if (sum < 2.0f && accVec.length() < 0.5f) {
-						vVec.scale(0.95f);
+					if (sum < 2.5f && max - min < 0.2f) {
+						vVec.scale(0.9f);
+						resting = true;
+						if (max - min < 0.1f) {
+							vVec.set(0, 0, 0);
+						}
 					}
 				}
 
-				float l = posVec.length();
-				for (int i = 0; i < 3; i++) {
-					if (posVec.values[i] > 10) {
-						if (vVec.values[i] < -200 || accVec.values[i] < -1f)
-							posVec.values[i] -= 2f;
-					} else if (posVec.values[i] < -10) {
-						if (vVec.values[i] > 200 || accVec.values[i] > 1f)
-							posVec.values[i] += 2f;
-					}
-				}
-				if (l > 1000.0f) {
-					posVec.scale(0.98f);
-				}
-				if (l < 10) {
-					posVec.scale(0.8f);
-				}
-				//posVec.values[2] *= 0.95f;
-				if (posVec.values[0] > 150) {
-					posVec.values[0] -= 1f;
-				} else if (posVec.values[0] < -1500) {
-					posVec.values[0] += 1f;
+				// position(mm)
+				if (vVec.length() > 0.5f) {
+					posVec.values[0] += vVec.values[0] * dt;
+					posVec.values[1] += vVec.values[1] * dt;
+					posVec.values[2] += vVec.values[2] * dt;
 				}
 
-				if (posVec.values[2] < -200) {
-					posVec.values[2] += 1f;
-				} else if (posVec.values[2] > 500) {
-					posVec.values[2] -= 1f;
+				// position limit
+				if (posVec.values[0] > 1000) {
+					posVec.values[0] *= 0.9f;
+				} else if (posVec.values[0] < -1000) {
+					posVec.values[0] *= 0.9f;
+				}
+
+				if (posVec.values[2] > 1000) {
+					posVec.values[2] *= 0.9f;
+				} else if (posVec.values[2] < -1000) {
+					posVec.values[2] *= 0.9f;
+				}
+
+				if (posVec.values[1] < -1800) {
+					posVec.values[1] *= 0.8f;
+				} else if (posVec.values[1] > 500) {
+					posVec.values[1] *= 0.8f;
+				}
+
+				// snap to 0
+				if (resting && zeroSnap) {
+					if (Math.abs(posVec.values[1]) < zeroSnapThreshold) {
+						posVec.values[1] *= 0.99f;
+					}
+
+					posVec.values[0] *= 0.995f;
+					posVec.values[2] *= 0.995f;
 				}
 
 				eventCount++;
 				if (eventCount % 20 == 0) {
-					Log.d("OrientationEstimater", "P=" + posVec + " V=" + vVec + " A=" + accVec + ":" + accVec.length() + " (G:" + groundVec);
+					Log.d("OrientationEstimater", "" + event.timestamp + ", " + posVec + ", " + vVec + ", " + accVec + ", AL:" + accVec.length() + " G:"
+							+ groundVec + (resting ? " R" : ""));
 				}
 
-			} else {
-				//vVec.scale(0.5f);
-				// vVec.set(0, 0, 0);
 			}
 
 			accVec.set(accVecN.values);
@@ -274,7 +271,7 @@ public class OrientationEstimater {
 		// probably stopping. adjust ground vector.
 		if (gyroVec.length() < 0.3f && Math.abs(accVecN.length() - G) < 0.5f) {
 			// estimated ground vec.
-			Matrix.multiplyMV(groundVec.array(), 0, rotationMatrix, 0, groundI, 0); // rotMatrix * groundA
+			Matrix.multiplyMV(groundVec.array(), 0, rotationMatrix, 0, groundI.array(), 0); // rotMatrix * groundA
 			float theta = (float) Math.acos(groundVec.dot(accVec));
 			if (theta > 0) {
 				float[] cross = groundVec.cross(accVec).normalize().array();
@@ -286,7 +283,6 @@ public class OrientationEstimater {
 				rotationMatrix = tm;
 			}
 		}
-
 	}
 
 }

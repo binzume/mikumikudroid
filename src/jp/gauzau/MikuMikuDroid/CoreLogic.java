@@ -44,9 +44,9 @@ public class CoreLogic {
 	private float[] mRMatrix = new float[16];
 	volatile private float[] mCameraOrientation = new float[3];
 	volatile private float[] cameraPosition = new float[3];
+	public float cameraOffsetHeight = 0;
+	public float cameraOffsetDist = 0;
 	float cameraDistance = 13f;
-	private long jumpStartTime = 0;
-	private float jumpVelocity = 0;
 	private float sensorRotationMatrix[] = null;
 	
 	// configurations
@@ -658,13 +658,6 @@ public class CoreLogic {
 		cameraVisible = !cameraVisible;
 	}
 
-	public void cameraJump() {
-		if (jumpStartTime + 1000 > System.currentTimeMillis())
-			return;
-		jumpStartTime = System.currentTimeMillis();
-		jumpVelocity = 4f;
-	}
-
 	private double calcPrevFrame(double frame, float step) {
 		return frame - step * 30;
 	}
@@ -1039,23 +1032,18 @@ public class CoreLogic {
 				setCamera(c.length * 0.8f - 2f, dx, c.location, c.rotation, c.view_angle, mRenderWidth, mRenderHeight);
 			}
 		} else {
-			float t = (System.currentTimeMillis() - jumpStartTime) / 1000.0f;
-			float dy = jumpVelocity * t - 4.8f * t * t;
-			if (dy < 0)
-				dy = 0;
-			//Log.d("", "dy:" + dy + "(" + jumpStartTime);
 			if (mAngle == 0) {
 				mCameraIndex.location[0] = cameraPosition[0];
-				mCameraIndex.location[1] = cameraPosition[1] + dy * 50;
-				mCameraIndex.location[2] = cameraPosition[2];
+				mCameraIndex.location[1] = cameraPosition[1] + cameraOffsetHeight;
+				mCameraIndex.location[2] = cameraPosition[2] + cameraOffsetDist;
 				mCameraIndex.rotation[0] = -mCameraOrientation[2] * 180 / 3.14159f;
 				mCameraIndex.rotation[1] = -mCameraOrientation[0] * 180 / 3.14159f;
 				mCameraIndex.rotation[2] = -mCameraOrientation[1] * 180 / 3.14159f;
 				setCamera(-cameraDistance, dx, mCameraIndex.location, mCameraIndex.rotation, 120, mRenderWidth, mRenderHeight); // -38f
 			} else {
 				mCameraIndex.location[0] = cameraPosition[0];
-				mCameraIndex.location[1] = cameraPosition[1] + dy * 50;
-				mCameraIndex.location[2] = cameraPosition[2];
+				mCameraIndex.location[1] = cameraPosition[1] + cameraOffsetHeight;
+				mCameraIndex.location[2] = cameraPosition[2] + cameraOffsetDist;
 				mCameraIndex.rotation[0] = -mCameraOrientation[2] * 180 / 3.14159f;
 				mCameraIndex.rotation[1] = -mCameraOrientation[0] * 180 / 3.14159f;
 				mCameraIndex.rotation[2] = -mCameraOrientation[1] * 180 / 3.14159f;

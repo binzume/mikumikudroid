@@ -402,6 +402,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 										}
 										mCoreLogic.storeState();
 									} catch (OutOfMemoryError e) {
+										e.printStackTrace();
 										return false;
 									} catch (IOException e) {
 										// TODO Auto-generated catch block
@@ -642,7 +643,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 	
 		if (motionDetector.jump) {
 			Log.d("","JUMP!");
-			mCoreLogic.cameraJump();
+			//mCoreLogic.cameraJump();
 		}
 		
 		if (!orientationEstimater.isReady()) return;
@@ -675,6 +676,8 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		//Log.d("Sensor","Orientation " + orientation[0] + "," + orientation[1] + "," + orientation[2]);
 		// mCoreLogic.setCameraOrientation(orientationEstimater.getCurrentOrientation());
 		mCoreLogic.setSensorRotationMatrix(orientationEstimater.getRotationMatrix());
+		// mCoreLogic.cameraOffsetHeight = orientationEstimater.getPosition()[1] * 0.007f;
+		// mCoreLogic.cameraOffsetDist = orientationEstimater.getPosition()[2] * 0.007f;
 	}
 	
 	float cameraPos[] = new float[]{0,17,-11};
@@ -716,7 +719,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 			break;
 		case KeyEvent.KEYCODE_X:
 		case KeyEvent.KEYCODE_BUTTON_B: // O
-			mCoreLogic.cameraJump();
+			// mCoreLogic.cameraJump();
 			break;
 		case KeyEvent.KEYCODE_BUTTON_A: // X
 		case KeyEvent.KEYCODE_SPACE:
