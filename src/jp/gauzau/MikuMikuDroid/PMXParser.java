@@ -238,6 +238,9 @@ public class PMXParser extends ParserBase implements ModelFile {
 				readTexBuf();
 				getByte();
 				int count = getInt();
+				if (count == 0) {
+					mSkinDisp.add(i, (short)0);
+				}
 				for (int j = 0 ; j < count; j++) {
 					if (getByte() == 0) {
 						mSkinDisp.add(i, readBoneIndex());
@@ -268,19 +271,30 @@ public class PMXParser extends ParserBase implements ModelFile {
 			float[] buf = new float[3];
 			for (int i = 0; i < num; i++) {
 				Face face = new Face();
+				Log.d("PMXParser", "FACE:  p: "+ position()  +" " + options[ATTR_MORPH_INDEX_SZ]);
 
 				face.name = readTexBuf();
 				readTexBuf();// eng
 				face.face_type = getByte(); // control panel
 				int morphType = getByte();
 				face.face_vert_count = getInt();
+				Log.d("PMXParser", "FACE: " + face.name + " p: "+ position() + " t:" +morphType+ " count:" + face.face_vert_count);
 
 				//				face.face_vert_data = new ArrayList<FaceVertData>(face.face_vert_count);
 				acc += face.face_vert_count;
 				if (isArm) { // for ARM native code
 					face.face_vert_index_native = ByteBuffer.allocateDirect(face.face_vert_count * 4).order(ByteOrder.nativeOrder()).asIntBuffer();
 					face.face_vert_offset_native = ByteBuffer.allocateDirect(face.face_vert_count * 4 * 3).order(ByteOrder.nativeOrder()).asFloatBuffer();
-					if (morphType != 8) {
+					if (morphType == 0) {
+						for (int j = 0; j < face.face_vert_count; j++) {
+							if (options[ATTR_MORPH_INDEX_SZ] == 1) {
+								getByte();
+							} else {
+								getShort();
+							}
+							getFloat();
+						}
+					} else if (morphType != 8) {
 						for (int j = 0; j < face.face_vert_count; j++) {
 							int v = readVertIndex();
 							getFloat(buf);
@@ -412,6 +426,7 @@ public class PMXParser extends ParserBase implements ModelFile {
 				getInt();
 
 				short flags = getShort();
+				Log.d("PMXParser", "BONE: " + bone.name + " p: "+ position() + " flags" + flags);
 				
 				if ((flags & 1) == 0) {
 					getFloat();
@@ -421,11 +436,10 @@ public class PMXParser extends ParserBase implements ModelFile {
 					readBoneIndex();
 				}
 				
-				if ((flags & 0x0100) != 0) {
+				if ((flags & 0x0300) != 0) {
 					readBoneIndex();
 					getFloat();
 				}
-				
 				if ((flags & 0x0400) != 0) {
 					bone.is_leg = true;
 					getFloat();
@@ -495,7 +509,7 @@ public class PMXParser extends ParserBase implements ModelFile {
 		Log.d("PMDParser", "TEXTURE: " + String.valueOf(texNum));
 		String[] texList = new String[texNum];
 		for (int i = 0; i< texNum; i++) {
-			texList[i] = readTexBuf();
+			texList[i] = readTexBuf().replace('\\', '/');
 		}
 
 		// the number of Vertexes

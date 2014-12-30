@@ -155,8 +155,12 @@ public class PMDParser extends ParserBase implements ModelFile {
 		if (mHasEnglishName == 1) {
 			parsePMDEnglishName();
 			parsePMDEnglishBoneList();
-			parsePMDEnglishSkinList();
-			parsePMDEnglishBoneDispName();
+			if (mSkinDisp != null) {
+				parsePMDEnglishSkinList();
+			}
+			if (mBoneDispName != null) {
+				parsePMDEnglishBoneDispName();
+			}
 		}
 
 	}
