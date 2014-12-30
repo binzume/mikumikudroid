@@ -20,7 +20,6 @@ public class OrientationEstimater {
 
 	private boolean landscape = true; // swapXY
 	private boolean zeroSnap = true;
-	private float zeroSnapThreshold = 500f;
 
 	private float[] mag = new float[3];
 	private long lastGyroTime = 0;
@@ -28,13 +27,14 @@ public class OrientationEstimater {
 	private long lastMagneTime = 0;
 	private long resetTime = 0;
 
-	private final Vector3f groundI = new Vector3f(0, 1, 0);
-	private final Vector3f groundVec = new Vector3f();
+	private final Vector3f gravityVecI = new Vector3f(0, 1, 0);
+	private final Vector3f tmpVec = new Vector3f();
 	private final Vector3f accVec = new Vector3f();
 	private final Vector3f accVecN = new Vector3f();
 	private final Vector3f vVec = new Vector3f();
 	private final Vector3f posVec = new Vector3f();
 	private final Vector3f gyroVec = new Vector3f();
+	public float posIntegretedError = 0;
 
 	private float[] position = new float[3];
 	private float[] outputPosition = new float[3];
@@ -52,6 +52,7 @@ public class OrientationEstimater {
 	public void reset() {
 		Log.d("OrientationEstimater", "reset");
 		resetTime = System.currentTimeMillis();
+		posIntegretedError = 0;
 		Matrix.setIdentityM(rotationMatrix, 0);
 		Matrix.setIdentityM(rotationMatrix_d, 0);
 		Matrix.setIdentityM(outputRotationMatrix, 0);
@@ -79,7 +80,9 @@ public class OrientationEstimater {
 	 * @return
 	 */
 	public float[] getRotationMatrix() {
-		Matrix.multiplyMM(outputRotationMatrix, 0, rotationMatrix, 0, rotationMatrix_d, 0);
+		Matrix.invertM(rotationMatrix_t1, 0, rotationMatrix, 0);
+		Matrix.multiplyMM(outputRotationMatrix, 0, rotationMatrix_t1, 0, rotationMatrix_d, 0);
+		// Matrix.translateM(outputRotationMatrix, 0, 0f, posVec.values[1] * -0.01f, 0f);
 		return outputRotationMatrix;
 	}
 
@@ -101,7 +104,8 @@ public class OrientationEstimater {
 		if (l > 0.001f) {
 			//  OutRot = a * Rot * D = Rot * b * D
 			//  b * D = Rot^-1 * a * OutRot
-			Matrix.invertM(rotationMatrix_t1, 0, rotationMatrix, 0);
+			//Matrix.invertM(rotationMatrix_t1, 0, rotationMatrix, 0);
+			System.arraycopy(rotationMatrix, 0, rotationMatrix_t1, 0, 16);
 			Matrix.rotateM(rotationMatrix_t1, 0, l * 180 / PI, dy, dx, 0);
 			Matrix.multiplyMM(rotationMatrix_t2, 0, rotationMatrix_t1, 0, outputRotationMatrix, 0);
 
@@ -147,10 +151,10 @@ public class OrientationEstimater {
 			}
 
 			float dt = (event.timestamp - lastAccelTime) * 0.000000001f; // dt(sec)
-			if (lastAccelTime > 0 && dt < 0.5f) {
+			if (lastAccelTime > 0 && dt < 0.5f && System.currentTimeMillis() - resetTime > 500) {
+
 				// m/s^2
-				Matrix.invertM(rotationMatrix_t1, 0, rotationMatrix, 0);
-				Matrix.multiplyMV(accVec.values, 0, rotationMatrix_t1, 0, accVecN.values, 0);
+				Matrix.multiplyMV(accVec.values, 0, rotationMatrix, 0, accVecN.values, 0); // rotMatrix * groundA
 				accVec.values[1] -= G;
 
 				// velocity(mm/s)
@@ -176,8 +180,8 @@ public class OrientationEstimater {
 							min = a;
 					}
 					if (sum < 2.5f && max - min < 0.2f) {
-						vVec.scale(0.9f);
 						resting = true;
+						vVec.scale(0.9f);
 						if (max - min < 0.1f) {
 							vVec.set(0, 0, 0);
 						}
@@ -190,6 +194,7 @@ public class OrientationEstimater {
 					posVec.values[1] += vVec.values[1] * dt;
 					posVec.values[2] += vVec.values[2] * dt;
 				}
+				posIntegretedError += vVec.length() * 0.0001f + accVec.length() * 0.1f;
 
 				// position limit
 				if (posVec.values[0] > 1000) {
@@ -206,24 +211,25 @@ public class OrientationEstimater {
 
 				if (posVec.values[1] < -1800) {
 					posVec.values[1] *= 0.8f;
-				} else if (posVec.values[1] > 500) {
+				} else if (posVec.values[1] > 1000) {
 					posVec.values[1] *= 0.8f;
 				}
 
 				// snap to 0
-				if (resting && zeroSnap) {
-					if (Math.abs(posVec.values[1]) < zeroSnapThreshold) {
-						posVec.values[1] *= 0.99f;
+				if (resting && zeroSnap && posIntegretedError > 0) {
+					if (posIntegretedError > 0) {
+						tmpVec.set(posVec.array());
+						posVec.values[1] *= 0.995f;
+						posVec.values[0] *= 0.995f;
+						posVec.values[2] *= 0.995f;
+						posIntegretedError -= tmpVec.sub(posVec).length();
 					}
-
-					posVec.values[0] *= 0.995f;
-					posVec.values[2] *= 0.995f;
 				}
 
 				eventCount++;
 				if (eventCount % 20 == 0) {
-					Log.d("OrientationEstimater", "" + event.timestamp + ", " + posVec + ", " + vVec + ", " + accVec + ", AL:" + accVec.length() + " G:"
-							+ groundVec + (resting ? " R" : ""));
+					Log.d("OrientationEstimater", "" + event.timestamp + ", " + posVec + ", " + vVec + ", " + accVec + ", AL:" + accVec.length()
+							+ (resting ? " R" : ""));
 				}
 
 			}
@@ -243,24 +249,15 @@ public class OrientationEstimater {
 			}
 			lastMagneTime = event.timestamp;
 		} else if (event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
-			// event.values : [x,y,z] -> [yaw pitch roll]  landscape mode
-			//Log.d("Sensor","TYPE_GYROSCOPE " + event.values[0] + "," + event.values[1] + "," + event.values[2]+ " ("+  event.timestamp);
-			if (Math.abs(event.values[0]) > 3.0f) {
-				posVec.values[1] *= 0.95f;
-			}
 			if (lastGyroTime > 0) {
 				float dt = (event.timestamp - lastGyroTime) * 0.000000001f;
 				if (landscape) {
-					gyroVec.set(-event.values[1], event.values[0], -event.values[2]);
+					gyroVec.set(event.values[1], -event.values[0], event.values[2]);
 				} else {
 					gyroVec.set(event.values[0], event.values[1], event.values[2]);
 				}
-				// Matrix.rotateM(rotationMatrix, 0, gyroVec.length() * dt * 180 / PI,  gyroVec.array()[0],  gyroVec.array()[1],  gyroVec.array()[2]);
-				Matrix.setRotateM(rotationMatrix_t1, 0, gyroVec.length() * dt * 180 / PI, gyroVec.array()[0], gyroVec.array()[1], gyroVec.array()[2]);
-				Matrix.multiplyMM(rotationMatrix_t2, 0, rotationMatrix_t1, 0, rotationMatrix, 0);
-				float tm[] = rotationMatrix_t2;
-				rotationMatrix_t2 = rotationMatrix;
-				rotationMatrix = tm;
+				Matrix.rotateM(rotationMatrix, 0, gyroVec.length() * dt * 180 / PI, gyroVec.array()[0], gyroVec.array()[1], gyroVec.array()[2]);
+				posIntegretedError += gyroVec.length() * dt * 5.0f; // TODO: error ratio control.
 			}
 			lastGyroTime = event.timestamp;
 		}
@@ -268,14 +265,16 @@ public class OrientationEstimater {
 		if (lastAccelTime == 0 || lastMagneTime == 0)
 			return; // wait for initialize
 
-		// probably stopping. adjust ground vector.
+		// adjust ground vector.
 		if (gyroVec.length() < 0.3f && Math.abs(accVecN.length() - G) < 0.5f) {
 			// estimated ground vec.
-			Matrix.multiplyMV(groundVec.array(), 0, rotationMatrix, 0, groundI.array(), 0); // rotMatrix * groundA
-			float theta = (float) Math.acos(groundVec.dot(accVec));
+			Matrix.multiplyMV(tmpVec.array(), 0, rotationMatrix, 0, accVec.values, 0);
+			float theta = (float) Math.acos(tmpVec.dot(gravityVecI));
 			if (theta > 0) {
-				float[] cross = groundVec.cross(accVec).normalize().array();
-				float factor = (System.currentTimeMillis() - resetTime < 300) ? 0.8f : 0.001f;
+				float[] cross = tmpVec.cross(gravityVecI).normalize().array();
+				float factor = (System.currentTimeMillis() - resetTime < 500) ? 0.9f : 0.0005f;
+
+				//Matrix.rotateM(rotationMatrix, 0, theta * 180 / PI * factor, cross[0], cross[1], cross[2]);
 				Matrix.setRotateM(rotationMatrix_t1, 0, theta * 180 / PI * factor, cross[0], cross[1], cross[2]);
 				Matrix.multiplyMM(rotationMatrix_t2, 0, rotationMatrix_t1, 0, rotationMatrix, 0);
 				float tm[] = rotationMatrix_t2;
@@ -284,5 +283,4 @@ public class OrientationEstimater {
 			}
 		}
 	}
-
 }
