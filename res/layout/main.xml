@@ -1,22 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <merge xmlns:android="http://schemas.android.com/apk/res/android" >
-<RelativeLayout 
-    android:id="@+id/content"
-    android:orientation="vertical"
-    android:gravity="bottom"
-    android:layout_width="fill_parent"
-    android:layout_height="fill_parent"
-    >
 
-</RelativeLayout>
+    <RelativeLayout
+        android:id="@+id/content"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:gravity="bottom"
+        android:orientation="vertical" >
+    </RelativeLayout>
 
     <LinearLayout
         android:id="@+id/top_menu"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical"
-        android:visibility="invisible"
-        android:orientation="horizontal" >
+        android:orientation="horizontal"
+        android:visibility="invisible" >
+
+        <CheckBox
+            android:id="@+id/oculusToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="Oculus" />
+
+        <CheckBox
+            android:id="@+id/postrackToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="false"
+            android:text="Pos" />
 
         <Button
             android:id="@+id/reset"
@@ -24,27 +37,18 @@
             android:layout_height="wrap_content"
             android:text="Reset" />
 
-        <ToggleButton
-            android:id="@+id/oculusToggle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:checked="true"
-            android:text="Oculus" />
-
         <Button
             android:id="@+id/viewMode"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="VMode" />
-        
+
         <Button
             android:id="@+id/openMenu"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="right"
             android:text="Menu" />
-        
-        </LinearLayout>
-
+    </LinearLayout>
 
 </merge>

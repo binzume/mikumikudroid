@@ -6,15 +6,17 @@
   const vec2 offset = vec2(0.0, 0.0);
   const float texAspect = 1.0;
 
+#if 1
 // Nexus7
   const float scaleR = 0.90;
   const float dx = -0.032;
   const float renderAspect = 9.0 / 7.0; //nexus7=9/7
+#else
 // Nexus5
-//  const float scaleR = 0.80; // nexus7=0.90
-//  const float dx = 0.018; // nexus7= -0.032
-//  const float renderAspect = 9.0 / 8.0; //nexus7=9/7
-  
+  const float scaleR = 0.80; // nexus7=0.90
+  const float dx = 0.018; // nexus7= -0.032
+  const float renderAspect = 9.0 / 8.0; //nexus7=9/7
+#endif  
   
   vec2 calcTexCoord(vec2 texCoord) {
     vec2 scale_factor = vec2(scaleR * 2.0,scaleR * renderAspect);

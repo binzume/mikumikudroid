@@ -24,7 +24,6 @@ public class OrientationEstimater {
 	private float[] mag = new float[3];
 	private long lastGyroTime = 0;
 	private long lastAccelTime = 0;
-	private long lastMagneTime = 0;
 	private long resetTime = 0;
 
 	private final Vector3f gravityVecI = new Vector3f(0, 1, 0);
@@ -138,7 +137,7 @@ public class OrientationEstimater {
 	}
 
 	public boolean isReady() {
-		return lastAccelTime != 0 && lastMagneTime != 0;
+		return lastAccelTime != 0 && lastGyroTime != 0;
 	}
 
 	public void onSensorEvent(SensorEvent event) {
@@ -247,7 +246,6 @@ public class OrientationEstimater {
 				mag[0] = -event.values[1];
 				mag[1] = event.values[0];
 			}
-			lastMagneTime = event.timestamp;
 		} else if (event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
 			if (lastGyroTime > 0) {
 				float dt = (event.timestamp - lastGyroTime) * 0.000000001f;
@@ -261,9 +259,6 @@ public class OrientationEstimater {
 			}
 			lastGyroTime = event.timestamp;
 		}
-
-		if (lastAccelTime == 0 || lastMagneTime == 0)
-			return; // wait for initialize
 
 		// adjust ground vector.
 		if (gyroVec.length() < 0.3f && Math.abs(accVecN.length() - G) < 0.5f) {

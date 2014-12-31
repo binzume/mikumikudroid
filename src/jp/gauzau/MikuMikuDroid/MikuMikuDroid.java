@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 
+import jp.gauzau.MikuMikuDroid.util.AccelerometerCalibratorR;
 import jp.gauzau.MikuMikuDroid.util.FullScreenCompatWrapper;
 import jp.gauzau.MikuMikuDroid.util.MotionDetector;
 import jp.gauzau.MikuMikuDroid.util.OrientationEstimater;
@@ -22,7 +23,6 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -38,7 +38,6 @@ import android.widget.RelativeLayout.LayoutParams;
 import android.widget.SeekBar;
 import android.widget.SeekBar.OnSeekBarChangeListener;
 import android.widget.Toast;
-import android.widget.ToggleButton;
 
 @TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
 public class MikuMikuDroid extends Activity implements SensorEventListener {
@@ -51,7 +50,9 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 	private ScaleGestureDetector mScaleGestureDetector;
 	private OrientationEstimater orientationEstimater = new OrientationEstimater();
 	private MotionDetector motionDetector = new MotionDetector();
-	
+	private AccelerometerCalibratorR calibrator = new AccelerometerCalibratorR();
+	private boolean posTracking = false;
+
 	// Model
 	private CoreLogic mCoreLogic;
 	
@@ -63,8 +64,9 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		
-		mSM = (SensorManager)getSystemService(SENSOR_SERVICE);
+		calibrator.load();
+
+		mSM = (SensorManager) getSystemService(SENSOR_SERVICE);
 		mAx = mSM.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
 		mMg = mSM.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
 
@@ -148,17 +150,25 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 				mCoreLogic.toggleViewMode();
 			}
 		});
-		
 
-		((ToggleButton)findViewById(R.id.oculusToggle)).setOnCheckedChangeListener(new OnCheckedChangeListener() {
+		((CompoundButton) findViewById(R.id.oculusToggle)).setOnCheckedChangeListener(new OnCheckedChangeListener() {
 			@Override
 			public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
 				mCoreLogic.enableOculusMode = isChecked;
 			}
 		});
 
+		((CompoundButton) findViewById(R.id.postrackToggle)).setOnCheckedChangeListener(new OnCheckedChangeListener() {
+			@Override
+			public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+				posTracking = isChecked;
+			}
+		});
+		
 		// Oculus enable
-		mCoreLogic.enableOculusMode = ((ToggleButton)findViewById(R.id.oculusToggle)).isChecked();
+		mCoreLogic.enableOculusMode = ((CompoundButton) findViewById(R.id.oculusToggle)).isChecked();
+
+		posTracking = ((CompoundButton) findViewById(R.id.postrackToggle)).isChecked();
 
 		//mRelativeLayout = new RelativeLayout(this);
 		//mRelativeLayout.setVerticalGravity(Gravity.BOTTOM);
@@ -297,7 +307,7 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		mRelativeLayout.setKeepScreenOn(true);
 		mMMGLSurfaceView.onResume();
 		if(mAx != null && mMg != null) {
-			mSM.registerListener(this, mAx, SensorManager.SENSOR_DELAY_GAME);
+			mSM.registerListener(this, mAx, SensorManager.SENSOR_DELAY_FASTEST);
 			mSM.registerListener(this, mMg, SensorManager.SENSOR_DELAY_GAME);
 			Sensor gs = mSM.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
 			if (gs != null) {
@@ -676,8 +686,10 @@ public class MikuMikuDroid extends Activity implements SensorEventListener {
 		//Log.d("Sensor","Orientation " + orientation[0] + "," + orientation[1] + "," + orientation[2]);
 		// mCoreLogic.setCameraOrientation(orientationEstimater.getCurrentOrientation());
 		mCoreLogic.setSensorRotationMatrix(orientationEstimater.getRotationMatrix());
-		// mCoreLogic.cameraOffsetHeight = orientationEstimater.getPosition()[1] * 0.007f;
-		// mCoreLogic.cameraOffsetDist = orientationEstimater.getPosition()[2] * 0.007f;
+		if (posTracking) {
+			mCoreLogic.cameraOffsetHeight = orientationEstimater.getPosition()[1] * 0.01f;
+			mCoreLogic.cameraOffsetDist = orientationEstimater.getPosition()[2] * 0.01f;
+		}
 	}
 	
 	float cameraPos[] = new float[]{0,17,-11};
